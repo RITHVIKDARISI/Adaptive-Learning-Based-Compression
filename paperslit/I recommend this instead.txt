@@ -1,0 +1,161 @@
+I recommend this instead
+
+Instead of only
+
+Compression Ratio
+
+consider
+
+Multi-objective reward
+Reward
+
+=
+
+α × Compression Saving
+
+− β × Latency
+
+− γ × CPU Usage
+
+− δ × Memory Usage
+
+Now the scheduler chooses the codec with the highest reward, not just the smallest file.
+
+
+Bro, THIS is exactly the research question of your project. You're asking the right thing.
+
+You are asking:
+
+"On what basis does the scheduler choose Zstd, Brotli, Gzip or LZ4?"
+
+It cannot choose randomly. There must be a scientific basis.
+
+Answer
+
+The scheduler selects the compression algorithm based on the features extracted from the message and the expected reward (or cost) learned during training.
+
+Think of it like this.
+
+Step 1: Extract Features
+
+For every message:
+
+Message:
+"Hello everyone, today's meeting starts at 10 AM."
+
+Extract:
+
+Feature	Value
+Character Length	48
+Token Count	9
+Entropy	3.8
+Repetition Score	0.10
+Arrival Rate	120 msg/sec
+Emoji Ratio	0
+Unique Word Ratio	0.95
+
+These become the input to the scheduler.
+
+Step 2: During Training
+
+The scheduler tries every codec on the same message.
+
+Example:
+
+Zstd
+Size	40 Bytes
+Latency	30 µs
+
+Cost
+
+40 + λ × 30
+Brotli
+Size	35 Bytes
+Latency	80 µs
+
+Cost
+
+35 + λ × 80
+Gzip
+Size	42 Bytes
+Latency	40 µs
+LZ4
+Size	50 Bytes
+Latency	8 µs
+
+Now compare all four.
+
+Suppose λ = 0.2
+
+Codec	Cost
+Zstd	46
+Brotli	51
+Gzip	50
+LZ4	52
+
+Winner:
+
+✅ Zstd
+
+So the training label for this message becomes
+
+Features
+
+↓
+
+ZSTD
+Another Message
+OK
+
+Run all codecs.
+
+Codec	Size	Latency
+Zstd	18	20
+Brotli	19	35
+Gzip	22	18
+LZ4	20	7
+
+Maybe none are worthwhile.
+
+Then
+
+Winner = SKIP
+Another Message
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+Highly repetitive.
+
+Maybe
+
+Codec	Cost
+Zstd	30
+Brotli	24
+Gzip	35
+LZ4	40
+
+Winner
+
+Brotli
+Therefore
+
+The ML model learns
+
+Features
+
+↓
+
+Best Codec
+My Recommendation
+
+If I were publishing this paper, I would not hard-code any rules like:
+
+Long text → Brotli
+Short text → Zstd
+
+Instead:
+
+During training, run every message through all four codecs.
+Measure compression ratio, latency, CPU usage, and memory.
+Compute a utility score for each codec.
+Label the message with the best-performing codec.
+Train the bandit to predict that optimal codec from the extracted features.
