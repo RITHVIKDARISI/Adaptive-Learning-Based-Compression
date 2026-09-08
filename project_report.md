@@ -23,15 +23,16 @@
 12. [Component 7: Data Loader and Dataset Preparation](#12-component-7-data-loader-and-dataset-preparation)
 13. [Experiment Pipeline](#13-experiment-pipeline)
 14. [Test Suite: Architecture, Coverage, and Results](#14-test-suite-architecture-coverage-and-results)
-15. [Experimental Results: Benchmark Metrics and Analysis](#15-experimental-results-benchmark-metrics-and-analysis)
-16. [Visualization Outputs](#16-visualization-outputs)
-17. [Runtime Utilities and Environment Logging](#17-runtime-utilities-and-environment-logging)
-18. [Interactive Premium Dashboard](#18-interactive-premium-dashboard)
-19. [CLI Demo and Evaluation Tools](#19-cli-demo-and-evaluation-tools)
-20. [Dependency Stack and Environment Specifications](#20-dependency-stack-and-environment-specifications)
-21. [Project File Structure and Code Summary](#21-project-file-structure-and-code-summary)
-22. [Key Findings and Conclusions](#22-key-findings-and-conclusions)
-23. [Known Limitations and Future Work](#23-known-limitations-and-future-work)
+15. [Rigorous Experimental Methodology (Post-Audit)](#15-rigorous-experimental-methodology-post-audit)
+16. [Experimental Results: Benchmark Metrics and Analysis](#16-experimental-results-benchmark-metrics-and-analysis)
+17. [Visualization Outputs](#17-visualization-outputs)
+18. [Runtime Utilities and Environment Logging](#18-runtime-utilities-and-environment-logging)
+19. [Interactive Premium Dashboard](#19-interactive-premium-dashboard)
+20. [CLI Demo and Evaluation Tools](#20-cli-demo-and-evaluation-tools)
+21. [Dependency Stack and Environment Specifications](#21-dependency-stack-and-environment-specifications)
+22. [Project File Structure and Code Summary](#22-project-file-structure-and-code-summary)
+23. [Key Findings and Conclusions](#23-key-findings-and-conclusions)
+24. [Known Limitations and Future Work](#24-known-limitations-and-future-work)
 
 ---
 
@@ -810,7 +811,29 @@ All tests pass successfully on the development environment (Python 3.13.5, Windo
 
 ---
 
-## 15. Experimental Results: Benchmark Metrics and Analysis
+## 15. Rigorous Experimental Methodology (Post-Audit)
+
+Before running the final benchmarks, a rigorous research-grade audit of the experimental methodology was conducted. The following critical methodological corrections were implemented in a newly isolated `benchmarking/` harness:
+
+### 15.1 Metric Definitions and Semantics
+- **Compression Ratio Confusion Resolved**: Previous iterations ambiguously referred to `original/compressed` or `compressed/original`. The harness now explicitly reports `compression_factor` (>1 indicates compression), `compressed_fraction` (<1 indicates compression), and `space_saving_pct` (>0 indicates compression). 
+- **Lossless Reconstruction**: A strict SHA-256 verification step was added to mathematically guarantee that every decompressed message perfectly matches the original UTF-8 bytes.
+
+### 15.2 True Latency and Throughput Accounting
+- **Feature Extraction Overhead**: The latency of `FeatureExtractor` (including MinHash operations) is now strictly accounted for in the total `e2e_latency_us` and compute costs.
+- **Wall-Clock Throughput**: Throughput (`msg/s` and `MB/s`) is no longer derived mathematically from summed latencies, but is instead measured using true `time.perf_counter()` over the entire simulated stream, capturing realistic Python and I/O overhead.
+- **Hidden Cache Costs**: Individual cache-insertion compression costs during batch flushes are now explicitly charged to `cache_store_latency_us`.
+
+### 15.3 Reproducibility and Rigor
+- **Deterministic Execution**: All benchmarks are run across five independent, strictly controlled seeds (`[42, 123, 456, 789, 2026]`) encompassing both NumPy and Python standard random libraries.
+- **Environment Tracking**: A full snapshot of the physical and virtual environment (CPU, logical cores, RAM, OS version, dependency stack, and Git SHA) is generated in `environment.json` alongside raw benchmark data.
+
+> [!IMPORTANT]
+> The baseline results reported below were generated prior to the aforementioned methodology audit. As per the `benchmarking/run_benchmark.py` harness deployment, these numbers are considered obsolete and will be superseded by the new multi-seed raw outputs in the `benchmark_results/` directory once the massive execution runs are authorized.
+
+---
+
+## 16. Experimental Results: Benchmark Metrics and Analysis
 
 ### 15.1 DailyDialog Results
 
@@ -909,7 +932,7 @@ From the `scheduler_latency.png` output and result metrics:
 
 ---
 
-## 16. Visualization Outputs
+## 17. Visualization Outputs
 
 **File**: [`experiments/plot_results.py`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/experiments/plot_results.py) — **179 lines**
 
@@ -942,7 +965,7 @@ A horizontal bar chart of Gini importance values from the Decision Tree model (g
 
 ---
 
-## 17. Runtime Utilities and Environment Logging
+## 18. Runtime Utilities and Environment Logging
 
 **File**: [`src/utils.py`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/src/utils.py) — **78 lines**
 
@@ -985,7 +1008,7 @@ These functions make all file I/O paths **portable and platform-independent** �
 
 ---
 
-## 18. Interactive Premium Dashboard
+## 19. Interactive Premium Dashboard
 
 **File**: [`dashboard.py`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/dashboard.py) — **~1,130 lines**
 
@@ -1002,7 +1025,7 @@ The interface eschews standard Streamlit styling for a completely bespoke gradie
 
 ---
 
-## 19. CLI Demo and Evaluation Tools
+## 20. CLI Demo and Evaluation Tools
 
 ### 18.1 `test_cache_and_batch_demo.py`
 
@@ -1062,7 +1085,7 @@ For each message, prints the `unique_word_ratio` (internal repetition), `repetit
 
 ---
 
-## 20. Dependency Stack and Environment Specifications
+## 21. Dependency Stack and Environment Specifications
 
 **File**: [`requirements.txt`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/requirements.txt)
 
@@ -1086,7 +1109,7 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 
 ---
 
-## 21. Project File Structure and Code Summary
+## 22. Project File Structure and Code Summary
 
 ### 21.1 Complete File Inventory
 
@@ -1134,7 +1157,7 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 
 ---
 
-## 22. Key Findings and Conclusions
+## 23. Key Findings and Conclusions
 
 ### 22.1 Message Length is the Dominant Signal
 
@@ -1177,7 +1200,7 @@ The Pareto frontier plots reveal:
 
 ---
 
-## 23. Known Limitations and Future Work
+## 24. Known Limitations and Future Work
 
 ### 23.1 Identified Limitations
 
