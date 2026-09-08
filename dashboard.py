@@ -690,13 +690,6 @@ def render_learning_advantage_section(container, stats: list, lambda_param: floa
 # --------------------------------------------------------------------------
 
 st.sidebar.title("📡 Controls")
-scheduler_choice = st.sidebar.selectbox(
-    "Scheduler",
-    SCHEDULER_CHOICES,
-    index=0,
-    help="Auto mode uses the LinUCB Bandit — it learns online during the stream and "
-         "automatically selects the best compression action for each message."
-)
 dataset_style = st.sidebar.selectbox("Stream style", list(DATASET_GENERATORS.keys()))
 lambda_param = st.sidebar.slider("λ (latency weight, cost = bytes + λ·µs)", 0.0, 0.05, 0.01, 0.005)
 n_messages = st.sidebar.slider("Messages to stream", 10, 200, 60, 10)
@@ -709,10 +702,7 @@ simulate_shift = st.sidebar.checkbox(
 )
 
 # Show active model info
-if scheduler_choice.startswith("Auto"):
-    st.sidebar.info("🤖 **Auto ML active** — LinUCB Bandit selects compression per message online")
-else:
-    st.sidebar.caption(f"Using: {scheduler_choice}")
+st.sidebar.info("🤖 **Auto ML active** — LinUCB Bandit selects compression per message online")
 
 st.sidebar.divider()
 if st.sidebar.button("🔄 Reset simulation state", use_container_width=True):
@@ -731,7 +721,7 @@ st.sidebar.caption(
 
 if "manager" not in st.session_state:
     st.session_state.manager, st.session_state.sim = fresh_pipeline(lambda_param)
-    st.session_state.scheduler = get_scheduler(scheduler_choice, dataset_style, lambda_param)
+    st.session_state.scheduler = get_scheduler(SCHEDULER_CHOICES[0], dataset_style, lambda_param)
     st.session_state.live_running = False
 
 sim: StreamSimulator = st.session_state.sim
@@ -756,29 +746,27 @@ with tab_live:
     st.subheader("Live-Paced Stream Replay")
 
     # Auto ML banner
-    if scheduler_choice.startswith("Auto"):
-        st.markdown(
-            """
-            <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
-                        border: 1px solid rgba(139,92,246,0.4); border-radius: 10px;
-                        padding: 12px 18px; margin-bottom: 12px;">
-              <span style="font-size:18px;">🤖</span>
-              <strong style="color:#a5b4fc;"> Auto ML Mode</strong>
-              <span style="color:#d1d5db; font-size:13px;">
-                — LinUCB Bandit is selecting the compression engine automatically for each
-                message. It explores actions online and adapts to the stream distribution
-                with no pre-training required.
-              </span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.write(
-            "Messages are replayed with real wall-clock pacing based on their recorded "
-            "inter-arrival intervals (scaled by the speed multiplier), so this reflects the "
-            "system actually processing messages as they arrive — not a pre-computed batch job."
-        )
+    st.markdown(
+        """
+        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+                    border: 1px solid rgba(139,92,246,0.4); border-radius: 10px;
+                    padding: 12px 18px; margin-bottom: 12px;">
+          <span style="font-size:18px;">🤖</span>
+          <strong style="color:#a5b4fc;"> Auto ML Mode</strong>
+          <span style="color:#d1d5db; font-size:13px;">
+            — LinUCB Bandit is selecting the compression engine automatically for each
+            message. It explores actions online and adapts to the stream distribution
+            with no pre-training required.
+          </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.write(
+        "Messages are replayed with real wall-clock pacing based on their recorded "
+        "inter-arrival intervals (scaled by the speed multiplier), so this reflects the "
+        "system actually processing messages as they arrive — not a pre-computed batch job."
+    )
 
     col_start, col_status = st.columns([1, 4])
     start_btn = col_start.button("▶ Start Live Stream", type="primary", use_container_width=True)
@@ -805,7 +793,7 @@ with tab_live:
     if start_btn:
         # Fresh pipeline + scheduler for a clean live run
         manager, sim = fresh_pipeline(lambda_param)
-        scheduler = get_scheduler(scheduler_choice, dataset_style, lambda_param)
+        scheduler = get_scheduler(SCHEDULER_CHOICES[0], dataset_style, lambda_param)
         st.session_state.manager, st.session_state.sim, st.session_state.scheduler = manager, sim, scheduler
 
         if simulate_shift:
@@ -862,24 +850,38 @@ with tab_single:
         "and latency performance across all ML models side-by-side."
     )
 
+    scheduler_choice = st.selectbox(
+        "Scheduler",
+        SCHEDULER_CHOICES,
+        index=0,
+        help="Select a model for testing this single message."
+    )
+
     msg_input = st.text_input("Enter a message to route through the pipeline:",
                                placeholder="e.g. Hey, are you free for a call at 5?", key="single_msg_input_field")
     test_btn = st.button("Test Message", type="primary", key="single_msg_test_button")
 
     if test_btn and msg_input.strip():
+        if scheduler_choice == SCHEDULER_CHOICES[0]:
+            test_scheduler = st.session_state.scheduler
+        else:
+            test_scheduler = get_scheduler(scheduler_choice, dataset_style, lambda_param)
+            
         # Store message and result in session state to persist across checkbox toggles
         st.session_state.single_msg_input = msg_input
         st.session_state.single_msg_result = sim.run_message(
-            f"manual-{time.time()}", msg_input, time.time(), st.session_state.scheduler
+            f"manual-{time.time()}", msg_input, time.time(), test_scheduler
         )
+        st.session_state.single_msg_scheduler_used = scheduler_choice
 
     if "single_msg_input" in st.session_state and st.session_state.single_msg_input.strip():
         msg_val = st.session_state.single_msg_input
         result = st.session_state.single_msg_result
+        used_sched = st.session_state.get("single_msg_scheduler_used", SCHEDULER_CHOICES[0])
 
         c1, c2 = st.columns(2)
         with c1:
-            st.markdown(f"### 📡 Active Scheduler Result ({scheduler_choice})")
+            st.markdown(f"### 📡 Active Scheduler Result ({used_sched})")
             if result.get("cache_hit"):
                 st.success("⚡ CACHE HIT — exact duplicate seen before, reused instantly")
             else:
