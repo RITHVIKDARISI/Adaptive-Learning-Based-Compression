@@ -3,7 +3,7 @@
 
 ---
 
-> **Report Scope**: This report documents the complete lifecycle of the Adaptive Learning-Based Compression Scheduling project — from research motivation and conceptual design, through full system architecture, module-level implementation, testing strategy, and final experimental results and output artifacts. **Only the core project (pre-August 18 production system) is covered; temporary exploratory dashboards are excluded.**
+> **Report Scope**: This report documents the complete lifecycle of the Adaptive Learning-Based Compression Scheduling project — from research motivation and conceptual design, through full system architecture, module-level implementation, testing strategy, the interactive premium dashboard, and final experimental results. **This represents the final, fully-integrated production system.**
 
 ---
 
@@ -26,11 +26,12 @@
 15. [Experimental Results: Benchmark Metrics and Analysis](#15-experimental-results-benchmark-metrics-and-analysis)
 16. [Visualization Outputs](#16-visualization-outputs)
 17. [Runtime Utilities and Environment Logging](#17-runtime-utilities-and-environment-logging)
-18. [CLI Demo and Evaluation Tools](#18-cli-demo-and-evaluation-tools)
-19. [Dependency Stack and Environment Specifications](#19-dependency-stack-and-environment-specifications)
-20. [Project File Structure and Code Summary](#20-project-file-structure-and-code-summary)
-21. [Key Findings and Conclusions](#21-key-findings-and-conclusions)
-22. [Known Limitations and Future Work](#22-known-limitations-and-future-work)
+18. [Interactive Premium Dashboard](#18-interactive-premium-dashboard)
+19. [CLI Demo and Evaluation Tools](#19-cli-demo-and-evaluation-tools)
+20. [Dependency Stack and Environment Specifications](#20-dependency-stack-and-environment-specifications)
+21. [Project File Structure and Code Summary](#21-project-file-structure-and-code-summary)
+22. [Key Findings and Conclusions](#22-key-findings-and-conclusions)
+23. [Known Limitations and Future Work](#23-known-limitations-and-future-work)
 
 ---
 
@@ -228,6 +229,7 @@ Adaptive Learning-Based Compression/
 ├── test_custom_text.py
 ├── test_dataset_demo.py
 ├── test_repetition_demo.py
+├── dashboard.py           (Premium Interactive UI)
 ├── requirements.txt
 └── implementation_plan.md
 ```
@@ -983,7 +985,24 @@ These functions make all file I/O paths **portable and platform-independent** �
 
 ---
 
-## 18. CLI Demo and Evaluation Tools
+## 18. Interactive Premium Dashboard
+
+**File**: [`dashboard.py`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/dashboard.py) — **~1,130 lines**
+
+To visually demonstrate the effectiveness of the system, a high-performance, interactive web dashboard was built using Streamlit and Plotly. The dashboard features a custom, highly polished "obsidian-indigo" CSS theme with sleek gradient cards, modern typography, and robust visual layout.
+
+### 18.1 Key Features
+
+- **🔴 Live Stream (Auto ML Mode)**: Replays a dataset stream with real wall-clock pacing. The **LinUCB Bandit** adaptively routes each message in real-time. Features live metrics and plots (Action Distribution, Latency Over Time, Pareto Frontier) updating asynchronously.
+- **✍️ Single Message Test**: A sandbox where users can type any message to see the extracted 9-dimensional features, exact cache hit status, compression ratio, and end-to-end latency. It also features a "Head-to-Head" checkbox to benchmark that specific message across all 5 models simultaneously.
+- **📊 Scheduler Comparison**: Runs a fixed stream dataset through every available scheduler independently to generate a direct comparative benchmark. Automatically renders beautiful bar charts and a multi-metric radar chart to identify the winning scheduler per metric.
+
+### 18.2 UI Design Choices
+The interface eschews standard Streamlit styling for a completely bespoke gradient aesthetic. The user experience is tightly controlled to prevent confusion—for example, the "Live Stream" tab explicitly restricts the backend model to the LinUCB Contextual Bandit, dynamically hiding conflicting user controls while seamlessly adapting to underlying distribution shifts (e.g., chat to tweets).
+
+---
+
+## 19. CLI Demo and Evaluation Tools
 
 ### 18.1 `test_cache_and_batch_demo.py`
 
@@ -1043,7 +1062,7 @@ For each message, prints the `unique_word_ratio` (internal repetition), `repetit
 
 ---
 
-## 19. Dependency Stack and Environment Specifications
+## 20. Dependency Stack and Environment Specifications
 
 **File**: [`requirements.txt`](file:///c:/Users/rithv/Downloads/Adaptive Learning-Based Compression/requirements.txt)
 
@@ -1067,9 +1086,9 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 
 ---
 
-## 20. Project File Structure and Code Summary
+## 21. Project File Structure and Code Summary
 
-### 20.1 Complete File Inventory
+### 21.1 Complete File Inventory
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -1092,12 +1111,13 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 | `test_custom_text.py` | 105 | Interactive custom text test |
 | `test_dataset_demo.py` | 193 | Dataset CLI evaluation demo |
 | `test_repetition_demo.py` | 80 | Repetition and cache reuse demo |
+| `dashboard.py` | 1,129 | Premium Interactive Dashboard |
 | `implementation_plan.md` | 97 | Technical design documentation |
 | `requirements.txt` | 12 | Dependency specifications |
 | `paperslit/README.md` | 99 | System architecture documentation |
-| **Total** | **~2,443** | |
+| **Total** | **~3,572** | |
 
-### 20.2 Data Artifacts
+### 21.2 Data Artifacts
 
 | File | Size | Contents |
 |------|------|---------|
@@ -1114,9 +1134,9 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 
 ---
 
-## 21. Key Findings and Conclusions
+## 22. Key Findings and Conclusions
 
-### 21.1 Message Length is the Dominant Signal
+### 22.1 Message Length is the Dominant Signal
 
 Across all three datasets and all lambda settings, `char_len` consistently captures >89% of Decision Tree feature importance. The primary scheduling decision is:
 
@@ -1124,17 +1144,17 @@ Across all three datasets and all lambda settings, `char_len` consistently captu
 
 For messages below ~25 characters, all compressors add more overhead (header bytes) than they save, making SKIP the optimal action. For messages above ~100 characters with redundant content, ZSTD or batching yield meaningful savings.
 
-### 21.2 Exact-Match Caching Dominates on Repetitive Streams
+### 22.2 Exact-Match Caching Dominates on Repetitive Streams
 
 For DailyDialog (conversational chat), the 90.96% cache hit rate observed with static compression baselines reveals that **most conversational messages are exact duplicates**. A simple exact-match cache effectively eliminates the need for per-message compression decisions for the majority of traffic.
 
 This implies that for real-world chat deployments, cache design and capacity are at least as important as the choice of compression algorithm.
 
-### 21.3 Compression is Counterproductive for Short Unique Messages
+### 22.3 Compression is Counterproductive for Short Unique Messages
 
 Sentiment140 (Twitter) demonstrated that for short, unique, high-entropy messages, classical compressors can produce output **larger than the input** (compression ratios > 1.0). This reinforces the need for adaptive scheduling — applying ZSTD blindly to a tweet stream wastes both CPU and bandwidth.
 
-### 21.4 LinUCB Bandit Behavior
+### 22.4 LinUCB Bandit Behavior
 
 The LinUCB Bandit showed interesting behavior:
 - **DailyDialog**: Achieved 83.28% cache hit rate after online learning — it discovered the value of CACHE_REUSE actions. However, the cold-start exploration of BATCH action during early messages inflated mean latency due to long queue waits.
@@ -1142,13 +1162,13 @@ The LinUCB Bandit showed interesting behavior:
 
 The bandit's key advantage is **no offline training** — it starts cold and adapts in real time, making it suitable for deployment on data distributions where labeled training data is unavailable.
 
-### 21.5 Supervised Schedulers Converge to SKIP on Short Streams
+### 22.5 Supervised Schedulers Converge to SKIP on Short Streams
 
 For DailyDialog at all tested lambda values, the supervised models (LR, DT, RF, GBM) all learned to SKIP every message (compression ratio = 1.0, 0% cache hits). This is because the offline label generator, using the cost function, correctly identifies SKIP as the cheapest action for short conversational messages. The trained classifiers generalize this rule perfectly.
 
 This is technically correct behavior, but means that for DailyDialog specifically, the sophisticated ML scheduler reduces to the trivial "always skip" policy — the real value of the cache is handled transparently by the simulator's cache layer, not the scheduler.
 
-### 21.6 Pareto Frontier Insights
+### 22.6 Pareto Frontier Insights
 
 The Pareto frontier plots reveal:
 - For DailyDialog, static baselines (Gzip, Zstd) achieve better compression ratios than the adaptive schedulers for medium lambda — because the static baselines compress even short messages while the adaptive schedulers skip them.
@@ -1157,9 +1177,9 @@ The Pareto frontier plots reveal:
 
 ---
 
-## 22. Known Limitations and Future Work
+## 23. Known Limitations and Future Work
 
-### 22.1 Identified Limitations
+### 23.1 Identified Limitations
 
 | Limitation | Impact | Potential Fix |
 |-----------|--------|---------------|
@@ -1171,7 +1191,7 @@ The Pareto frontier plots reveal:
 | No compression quality levels explored | Fixed Zstd level=3, Brotli quality=4 | Add codec quality as part of the action space |
 | Dataset size limited to 5,000 messages | Results may not generalize to streaming volumes of millions/hour | Scale experiments with larger corpora |
 
-### 22.2 Future Research Directions
+### 23.2 Future Research Directions
 
 1. **Contextual Batching**: Instead of always queuing for BATCH action, use features to predict the optimal batch partner — only batch with messages that share high Jaccard similarity.
 
