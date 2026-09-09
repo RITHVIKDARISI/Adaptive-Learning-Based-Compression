@@ -8,6 +8,7 @@ class LRUCache:
     def __init__(self, capacity: int = 1000):
         self.cache = OrderedDict()
         self.capacity = capacity
+        self.evictions = 0
 
     def get(self, key: str) -> Optional[tuple[bytes, str]]:
         if key not in self.cache:
@@ -22,9 +23,13 @@ class LRUCache:
         self.cache[key] = value
         if len(self.cache) > self.capacity:
             self.cache.popitem(last=False)  # Remove oldest (FIFO/LRU)
+            self.evictions += 1
 
     def clear(self):
         self.cache.clear()
+
+    def __len__(self):
+        return len(self.cache)
 
 class Batcher:
     def __init__(self, max_batch_size: int = 10, timeout_seconds: float = 0.5):
@@ -65,6 +70,12 @@ class BatchCacheManager:
     def __init__(self, cache_capacity: int = 1000, max_batch_size: int = 10, timeout_seconds: float = 0.5):
         self.cache = LRUCache(capacity=cache_capacity)
         self.batcher = Batcher(max_batch_size=max_batch_size, timeout_seconds=timeout_seconds)
+
+    @property
+    def cache_evictions(self) -> int:
+        if hasattr(self.cache, 'evictions'):
+            return self.cache.evictions
+        return 0
 
     @staticmethod
     def encode_batch(messages: list[str]) -> bytes:

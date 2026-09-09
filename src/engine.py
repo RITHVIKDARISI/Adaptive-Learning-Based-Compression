@@ -4,6 +4,9 @@ import zstandard as zstd
 import brotli
 import gzip
 import lz4.block
+import zlib
+import bz2
+import lzma
 
 class CompressionEngine:
     def __init__(self):
@@ -30,6 +33,12 @@ class CompressionEngine:
             compressed = gzip.compress(data, compresslevel=6)
         elif codec == 'LZ4':
             compressed = lz4.block.compress(data, store_size=True)
+        elif codec == 'ZLIB':
+            compressed = zlib.compress(data)
+        elif codec == 'BZ2':
+            compressed = bz2.compress(data)
+        elif codec == 'LZMA':
+            compressed = lzma.compress(data)
         else:
             raise ValueError(f"Unknown codec: {codec}")
             
@@ -58,6 +67,12 @@ class CompressionEngine:
             decompressed_data = gzip.decompress(compressed_bytes)
         elif codec == 'LZ4':
             decompressed_data = lz4.block.decompress(compressed_bytes)
+        elif codec == 'ZLIB':
+            decompressed_data = zlib.decompress(compressed_bytes)
+        elif codec == 'BZ2':
+            decompressed_data = bz2.decompress(compressed_bytes)
+        elif codec == 'LZMA':
+            decompressed_data = lzma.decompress(compressed_bytes)
         else:
             raise ValueError(f"Unknown codec: {codec}")
             

@@ -123,7 +123,8 @@ def prepare_dailydialog(n_samples: int = 5000) -> pd.DataFrame:
     df = pd.DataFrame({
         "msg_id": range(len(messages)),
         "text": messages,
-        "timestamp": timestamps
+        "timestamp": timestamps,
+        "source_type": "SYNTHETIC" if "synthetic" in output_path else "UNKNOWN" # To be fixed below
     })
     
     output_path = os.path.join(get_data_dir(), "dailydialog_clean.csv")
@@ -175,7 +176,8 @@ def prepare_sentiment140(n_samples: int = 5000) -> pd.DataFrame:
     df = pd.DataFrame({
         "msg_id": range(len(messages)),
         "text": messages,
-        "timestamp": timestamps
+        "timestamp": timestamps,
+        "source_type": "SYNTHETIC"
     })
     
     output_path = os.path.join(get_data_dir(), "sentiment140_clean.csv")
@@ -244,7 +246,8 @@ def prepare_nus_sms(n_samples: int = 5000) -> pd.DataFrame:
     df = pd.DataFrame({
         "msg_id": range(len(messages)),
         "text": messages,
-        "timestamp": timestamps
+        "timestamp": timestamps,
+        "source_type": "SYNTHETIC"
     })
     
     output_path = os.path.join(get_data_dir(), "nussms_clean.csv")

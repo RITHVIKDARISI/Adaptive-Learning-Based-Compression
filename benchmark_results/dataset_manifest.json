@@ -1,0 +1,17 @@
+{
+    "dailydialog_clean.csv": {
+        "provenance": "UNKNOWN",
+        "sha256": "0ec304e4507457720eff7ad60c0e048c8b66920e3b633bf54a309b4e14443e2c",
+        "row_count": 5000
+    },
+    "nussms_clean.csv": {
+        "provenance": "UNKNOWN",
+        "sha256": "8fa38b26c4397c005f3369519cc7aa00e651235383b79b183ebd1bc4f1a07196",
+        "row_count": 5000
+    },
+    "sentiment140_clean.csv": {
+        "provenance": "UNKNOWN",
+        "sha256": "bbd4f14d209fef25cfc5d27c1735f01ba13fa70d63f6a217fb5dd5bc215b28be",
+        "row_count": 5000
+    }
+}

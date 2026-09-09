@@ -110,17 +110,102 @@ class OfflineLabelGenerator:
             
         return labels
 
+class CorrectedOfflineLabelGenerator:
+    def __init__(self, lambda_param: float = 0.01, batch_timeout_sec: float = 0.5, batch_max_size: int = 50):
+        """
+        Generates offline-optimal labels using exact mathematical simulation of the training stream.
+        """
+        self.lambda_param = lambda_param
+        self.engine = CompressionEngine()
+        self.batch_timeout_sec = batch_timeout_sec
+        self.batch_max_size = batch_max_size
+
+    def generate_labels(self, messages: list[str], timestamps: list[float]) -> list[int]:
+        labels = [0] * len(messages)
+        
+        # 1. Precalculate non-batch costs for every message
+        costs_matrix = []
+        for msg in messages:
+            raw_bytes = msg.encode('utf-8')
+            msg_costs = {}
+            msg_costs[0] = len(raw_bytes) + self.lambda_param * 0.0
+            
+            zcomp, zlat = self.engine.compress(msg, 'ZSTD')
+            msg_costs[1] = len(zcomp) + self.lambda_param * zlat
+            
+            bcomp, blat = self.engine.compress(msg, 'BROTLI')
+            msg_costs[2] = len(bcomp) + self.lambda_param * blat
+            
+            gcomp, glat = self.engine.compress(msg, 'GZIP')
+            msg_costs[3] = len(gcomp) + self.lambda_param * glat
+            
+            lcomp, llat = self.engine.compress(msg, 'LZ4')
+            msg_costs[4] = len(lcomp) + self.lambda_param * llat
+            
+            costs_matrix.append(msg_costs)
+            
+        # 2. Simulate true batches to find exact BATCH cost
+        batch_queue = []
+        batch_start_time = None
+        
+        def flush_batch(flush_time: float, current_queue: list):
+            if not current_queue: return
+            
+            batch_texts = [item[0] for item in current_queue]
+            batch_payload = "\\n".join(batch_texts) # Simple framing simulation
+            
+            comp_bytes, comp_lat = self.engine.compress(batch_payload, 'ZSTD')
+            
+            batch_size = len(comp_bytes)
+            num_messages = len(current_queue)
+            total_orig_len = sum(len(text.encode('utf-8')) for text in batch_texts)
+            
+            for text, ts, orig_idx in current_queue:
+                orig_size = len(text.encode('utf-8'))
+                
+                # Correctly proportional size share
+                size_share = batch_size * (orig_size / max(total_orig_len, 1))
+                
+                queue_wait_us = (flush_time - ts) * 1_000_000
+                comp_lat_share = comp_lat / num_messages
+                
+                batch_cost = size_share + self.lambda_param * (queue_wait_us + comp_lat_share)
+                
+                costs_matrix[orig_idx][5] = batch_cost
+                
+        # Run stream simulation
+        for i, (msg, ts) in enumerate(zip(messages, timestamps)):
+            if not batch_queue:
+                batch_start_time = ts
+                
+            if batch_queue and (ts - batch_start_time >= self.batch_timeout_sec or len(batch_queue) >= self.batch_max_size):
+                flush_batch(ts, batch_queue)
+                batch_queue = []
+                batch_start_time = ts
+                
+            batch_queue.append((msg, ts, i))
+            
+        # Final flush
+        if batch_queue:
+            flush_batch(batch_queue[-1][1], batch_queue)
+            
+        # 3. Assign optimal labels
+        for i, msg_costs in enumerate(costs_matrix):
+            labels[i] = min(msg_costs, key=msg_costs.get)
+            
+        return labels
+
 class SupervisedScheduler:
-    def __init__(self, model_type: str = 'decision_tree'):
+    def __init__(self, model_type: str = 'decision_tree', random_state: int = 42):
         self.model_type = model_type
         if model_type == 'logistic_regression':
-            self.model = LogisticRegression(max_iter=1000)
+            self.model = LogisticRegression(max_iter=1000, random_state=random_state)
         elif model_type == 'decision_tree':
-            self.model = DecisionTreeClassifier(max_depth=5)
+            self.model = DecisionTreeClassifier(max_depth=5, random_state=random_state)
         elif model_type == 'random_forest':
-            self.model = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
+            self.model = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=random_state)
         elif model_type == 'gradient_boosting':
-            self.model = GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42)
+            self.model = GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=random_state)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
             

@@ -71,7 +71,12 @@ class StreamSimulator:
                 "orig_size": len(text.encode('utf-8')),
                 "comp_size": len(compressed_bytes),
                 "queued": False,
-                "e2e_lat_us": cache_lookup_lat + decomp_lat
+                "e2e_lat_us": cache_lookup_lat + decomp_lat,
+                "compute_cost": len(compressed_bytes) + self.lambda_param * cache_lookup_lat,
+                "user_perceived_cost": len(compressed_bytes) + self.lambda_param * (cache_lookup_lat + decomp_lat),
+                "cache_lookup_lat_us": cache_lookup_lat,
+                "cache_store_lat_us": 0.0,
+                "queue_wait_lat_us": 0.0
             }
             self.stats.append(metrics)
             return metrics
@@ -104,7 +109,12 @@ class StreamSimulator:
                 "orig_size": len(text.encode('utf-8')),
                 "comp_size": len(text.encode('utf-8')),
                 "queued": False,
-                "e2e_lat_us": total_sched_lat
+                "e2e_lat_us": total_sched_lat,
+                "compute_cost": len(text.encode('utf-8')) + self.lambda_param * total_sched_lat,
+                "user_perceived_cost": len(text.encode('utf-8')) + self.lambda_param * total_sched_lat,
+                "cache_lookup_lat_us": cache_lookup_lat,
+                "cache_store_lat_us": 0.0,
+                "queue_wait_lat_us": 0.0
             }
             
             # Update online bandit if applicable (latency in us)
@@ -121,7 +131,9 @@ class StreamSimulator:
             decomp_text, decomp_lat = self.engine.decompress(comp_bytes, action_name)
             
             # Store in cache
+            c_start = time.perf_counter()
             self.manager.cache_store(text, comp_bytes, action_name)
+            store_lat = (time.perf_counter() - c_start) * 1_000_000
             
             metrics = {
                 "msg_id": msg_id,
@@ -135,7 +147,12 @@ class StreamSimulator:
                 "orig_size": len(text.encode('utf-8')),
                 "comp_size": len(comp_bytes),
                 "queued": False,
-                "e2e_lat_us": total_sched_lat + comp_lat + decomp_lat
+                "e2e_lat_us": total_sched_lat + comp_lat + decomp_lat,
+                "compute_cost": len(comp_bytes) + self.lambda_param * (total_sched_lat + comp_lat),
+                "user_perceived_cost": len(comp_bytes) + self.lambda_param * (total_sched_lat + comp_lat + decomp_lat),
+                "cache_lookup_lat_us": cache_lookup_lat,
+                "cache_store_lat_us": store_lat,
+                "queue_wait_lat_us": 0.0
             }
             
             if hasattr(scheduler, 'update'):
@@ -212,12 +229,20 @@ class StreamSimulator:
                 "orig_size": orig_size,
                 "comp_size": int(size_share),
                 "queued": False,
-                "e2e_lat_us": pending["scheduler_lat_us"] + queue_wait_us + comp_lat_share + decomp_lat_share
+                "e2e_lat_us": pending["scheduler_lat_us"] + queue_wait_us + comp_lat_share + decomp_lat_share,
+                "compute_cost": int(size_share) + self.lambda_param * (pending["scheduler_lat_us"] + comp_lat_share),
+                "user_perceived_cost": int(size_share) + self.lambda_param * (pending["scheduler_lat_us"] + queue_wait_us + comp_lat_share + decomp_lat_share),
+                "cache_lookup_lat_us": 0.0,
+                "cache_store_lat_us": 0.0,
+                "queue_wait_lat_us": queue_wait_us
             }
             
             # Store individually in exact-match cache for future hits
             indiv_comp, _ = self.engine.compress(text, 'ZSTD')
+            c_start = time.perf_counter()
             self.manager.cache_store(text, indiv_comp, 'ZSTD')
+            store_lat = (time.perf_counter() - c_start) * 1_000_000
+            metrics["cache_store_lat_us"] = store_lat
             
             # Update bandit online reward if applicable (latency in us)
             if hasattr(scheduler, 'update'):
@@ -256,14 +281,37 @@ class StreamSimulator:
         total_proc_seconds = sum(s["e2e_lat_us"] for s in self.stats) / 1_000_000
         throughput = len(self.stats) / total_proc_seconds if total_proc_seconds > 0 else 0.0
         
+        
+        import psutil
+        peak_rss_mb = psutil.Process().memory_info().rss / 1048576.0
+        throughput_mb_s = (total_orig / 1048576.0) / total_proc_seconds if total_proc_seconds > 0 else 0.0
+
+        total_compute_cost = sum(s["compute_cost"] for s in self.stats)
+        total_user_cost = sum(s["user_perceived_cost"] for s in self.stats)
+        
+        cache_comp_savings = sum(s["orig_size"] - s["comp_size"] for s in self.stats if s["action"] == "CACHE_REUSE")
+        
         return {
             "total_messages": len(self.stats),
+            "total_orig_bytes": total_orig,
+            "total_comp_bytes": total_comp,
             "compression_ratio": comp_ratio,
+            "space_saving_pct": 100 * (1 - (total_comp / total_orig)) if total_orig > 0 else 0.0,
+            "cache_compression_savings_bytes": cache_comp_savings,
             "mean_e2e_latency_us": avg_e2e_lat,
+            "p50_e2e_latency_us": np.percentile([s["e2e_lat_us"] for s in self.stats], 50),
             "p95_e2e_latency_us": p95_e2e_lat,
+            "p99_e2e_latency_us": np.percentile([s["e2e_lat_us"] for s in self.stats], 99),
             "mean_scheduler_latency_us": avg_sched_lat,
             "p95_scheduler_latency_us": p95_sched_lat,
+            "mean_cache_lookup_latency_us": np.mean([s["cache_lookup_lat_us"] for s in self.stats]),
+            "mean_cache_store_latency_us": np.mean([s["cache_store_lat_us"] for s in self.stats]),
+            "mean_queue_wait_latency_us": np.mean([s["queue_wait_lat_us"] for s in self.stats]),
             "cache_hit_rate": cache_hit_rate,
-            "throughput_msg_per_sec": throughput
+            "throughput_msg_per_sec": throughput,
+            "throughput_mb_s": throughput_mb_s,
+            "peak_rss_mb": peak_rss_mb,
+            "total_compute_cost": total_compute_cost,
+            "total_user_perceived_cost": total_user_cost
         }
 

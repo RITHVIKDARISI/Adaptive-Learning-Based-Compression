@@ -45,6 +45,7 @@ def capture_environment_specs(output_path: str):
         "physical_cores": psutil.cpu_count(logical=False),
         "logical_cores": psutil.cpu_count(logical=True),
         "total_ram_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+        "hostname": "ANONYMIZED",
         "packages": {}
     }
     

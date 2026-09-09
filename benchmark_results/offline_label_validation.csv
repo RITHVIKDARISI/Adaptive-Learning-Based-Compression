@@ -1,0 +1,3 @@
+Methodology,SKIP%,ZSTD%,BATCH%,Agreement_with_Corrected%,Cohens_Kappa,DT_Train_Accuracy%,Downstream_Total_Cost
+Original (Flawed),100.0,0.0,0.0,100.0,1.0,100.0,26112.734996864572
+Corrected (Mathematical),100.0,0.0,0.0,100.0,1.0,100.0,26106.880999146495
