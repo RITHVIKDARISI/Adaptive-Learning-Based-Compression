@@ -35,7 +35,7 @@ class StreamSimulator:
         self.pending_batch_metrics = {}  # msg_id -> dict with partially filled metrics
         self.wall_clock_time_sec = None
 
-    def run_message(self, msg_id: int, text: str, timestamp: float, scheduler) -> dict:
+    def run_message(self, msg_id: int, text: str, timestamp: float, scheduler, precomputed_features: dict = None) -> dict:
         """
         Simulates an incoming message.
         Args:
@@ -43,6 +43,7 @@ class StreamSimulator:
             text: Raw message content.
             timestamp: Epoch arrival timestamp in seconds.
             scheduler: A scheduler model with a `.predict(features_dict)` method, or a bandit.
+            precomputed_features: Optional pre-extracted base features dictionary.
         Returns:
             Dict containing immediate metrics for the message (might be marked as queued for BATCH).
         """
@@ -105,9 +106,18 @@ class StreamSimulator:
             return metrics
 
         # 2. Extract Features (Cache Miss)
-        feat_start = time.perf_counter()
-        features = self.feature_extractor.extract_features(text, timestamp)
-        feat_lat_us = (time.perf_counter() - feat_start) * 1_000_000
+        if precomputed_features is not None:
+            features = precomputed_features.copy()
+            feat_lat_us = features.get("feat_lat_us", 20.0)
+        else:
+            feat_start = time.perf_counter()
+            features = self.feature_extractor.extract_features(text, timestamp)
+            feat_lat_us = (time.perf_counter() - feat_start) * 1_000_000
+
+        # Inject batch queue context for deadline-aware estimators
+        features["queue_len"] = len(self.manager.batcher.queue)
+        features["batch_max_size"] = self.manager.batcher.max_batch_size
+        features["batch_timeout_seconds"] = self.manager.batcher.timeout_seconds
 
         # 3. Query Scheduler
         if hasattr(scheduler, 'predict'):
@@ -465,6 +475,7 @@ class StreamSimulator:
             "throughput_mb_s": throughput_mb_s,
             "peak_rss_mb": peak_rss_mb,
             "total_compute_cost": total_compute_cost,
-            "total_user_perceived_cost": total_user_cost
+            "total_user_perceived_cost": total_user_cost,
+            "mean_cost": total_user_cost / max(len(self.stats), 1)
         }
 

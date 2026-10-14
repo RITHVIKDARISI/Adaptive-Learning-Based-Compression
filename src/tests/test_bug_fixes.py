@@ -292,5 +292,136 @@ class TestBugFixesAndSanityChecks(unittest.TestCase):
         decoded = manager.decode_batch(encoded)
         self.assertEqual(decoded, test_strings, "Batch framed encoding/decoding failed lossless roundtrip")
 
+
+class TestDeadlineMaskingAndBatchLosslessness(unittest.TestCase):
+    """
+    Unit tests ensuring:
+    1. BATCH action is masked when predicted queue wait exceeds deadline.
+    2. BATCH action is allowed when predicted queue wait is within deadline.
+    3. Batch framing round-trip losslessness is preserved and unchanged across diverse data.
+    4. SimulatorAlignedOracle correctly models framing and losslessness without error.
+    """
+
+    def setUp(self):
+        from src.scheduler import HeuristicScheduler, estimate_batch_wait_us, SimulatorAlignedOracle
+        from src.bandit import LinUCBBandit
+        from src.manager import BatchCacheManager
+        from src.engine import CompressionEngine
+
+        self.HeuristicScheduler = HeuristicScheduler
+        self.estimate_batch_wait_us = estimate_batch_wait_us
+        self.SimulatorAlignedOracle = SimulatorAlignedOracle
+        self.LinUCBBandit = LinUCBBandit
+        self.manager = BatchCacheManager()
+        self.engine = CompressionEngine()
+
+    def test_batch_masked_above_deadline(self):
+        # High queue wait case: arrival rate is low (1 msg/s), queue empty (queue_len=0, needed=9)
+        # Timeout 0.5s -> est wait is 500,000 us > 50,000 us deadline
+        feat_high_wait = {
+            "char_len": 200,
+            "repetition_score": 0.95,
+            "arrival_rate": 1.0,
+            "queue_len": 0,
+            "batch_max_size": 10,
+            "batch_timeout_seconds": 0.5
+        }
+
+        est_wait = self.estimate_batch_wait_us(feat_high_wait)
+        self.assertGreater(est_wait, 50000.0, "Estimated wait should exceed 50ms deadline")
+
+        # 1. Heuristic without deadline -> predicts BATCH (5)
+        h_no_deadline = self.HeuristicScheduler(enable_deadline=False)
+        action_no_dl, _ = h_no_deadline.predict(feat_high_wait)
+        self.assertEqual(action_no_dl, 5, "Heuristic without deadline should select BATCH (5)")
+
+        # 2. Heuristic with deadline -> masks BATCH (5), falls back to ZSTD (1)
+        h_with_deadline = self.HeuristicScheduler(enable_deadline=True, max_wait_us=50000.0)
+        action_dl, _ = h_with_deadline.predict(feat_high_wait)
+        self.assertEqual(action_dl, 1, "Heuristic with deadline should mask BATCH and select ZSTD (1)")
+
+        # 3. LinUCB with deadline -> masks BATCH (5) even when BATCH has highest expectation
+        bandit = self.LinUCBBandit(enable_deadline=True, max_wait_us=50000.0)
+        # Manually bias b for BATCH (index 5) to make it the top choice without masking
+        bandit.b[5] = np.ones((bandit.d, 1)) * 1000.0
+        bandit.A_inv[5] = np.eye(bandit.d)
+        # If deadline is disabled, it would choose 5
+        bandit.enable_deadline = False
+        self.assertEqual(bandit.predict(feat_high_wait)[0], 5)
+        # When deadline is enabled, action 5 is masked
+        bandit.enable_deadline = True
+        action_bandit, _ = bandit.predict(feat_high_wait)
+        self.assertNotEqual(action_bandit, 5, "LinUCB with deadline must NOT select masked BATCH")
+
+    def test_batch_allowed_below_deadline(self):
+        # Case A: High arrival rate (1000 msg/s), queue_len=0 -> est wait = 9/1000 = 9000 us < 50000 us
+        feat_high_rate = {
+            "char_len": 200,
+            "repetition_score": 0.95,
+            "arrival_rate": 1000.0,
+            "queue_len": 0,
+            "batch_max_size": 10,
+            "batch_timeout_seconds": 0.5
+        }
+        est_wait_rate = self.estimate_batch_wait_us(feat_high_rate)
+        self.assertLess(est_wait_rate, 50000.0, "High arrival rate should yield wait under deadline")
+
+        h_deadline = self.HeuristicScheduler(enable_deadline=True, max_wait_us=50000.0)
+        action_rate, _ = h_deadline.predict(feat_high_rate)
+        self.assertEqual(action_rate, 5, "BATCH should be allowed when arrival rate is fast enough")
+
+        # Case B: Queue is full - 1, message triggers immediate flush -> est wait = 0.0 us
+        feat_flush = {
+            "char_len": 200,
+            "repetition_score": 0.95,
+            "arrival_rate": 0.1,  # very slow rate, but queue is ready to flush
+            "queue_len": 9,
+            "batch_max_size": 10,
+            "batch_timeout_seconds": 0.5
+        }
+        est_wait_flush = self.estimate_batch_wait_us(feat_flush)
+        self.assertEqual(est_wait_flush, 0.0, "Wait must be 0 us when message fills batch capacity")
+        action_flush, _ = h_deadline.predict(feat_flush)
+        self.assertEqual(action_flush, 5, "BATCH should be allowed when queue is filled")
+
+    def test_batch_round_trip_losslessness_unchanged(self):
+        # Comprehensive test with unicode, emojis, control chars, newlines, binary sequences
+        messages = [
+            "Hello, world!",
+            "Line 1\nLine 2\nLine 3\r\nLine 4",
+            "Special characters: !@#$%^&*()_+-=[]{}|;':\",./<>?`~",
+            "Unicode texts: Bonjour le monde!  ! \u4e2d\u6587 \u0928\u092e\u0938\u094d\u0924\u0947",
+            "Emojis: \U0001f600 \U0001f680 \U0001f389 \U0001f4ca",
+            "Long repetitive string: " + "repeat " * 200,
+            "JSON-like: {\"id\": 123, \"payload\": \"sample\", \"active\": true}"
+        ]
+
+        # 4-byte big-endian framing
+        encoded_bytes = self.manager.encode_batch(messages)
+        # Compress and decompress via ZSTD
+        comp_bytes, _ = self.engine.compress(encoded_bytes, 'ZSTD')
+        decomp_bytes, _ = self.engine.decompress(comp_bytes, 'ZSTD', raw_bytes=True)
+        # Decode framed messages
+        decoded_messages = self.manager.decode_batch(decomp_bytes)
+        self.assertEqual(decoded_messages, messages, "Batch round-trip failed exact losslessness verification")
+
+    def test_simulator_aligned_oracle_execution(self):
+        oracle = self.SimulatorAlignedOracle(lambda_param=0.01, max_batch_size=5, timeout_seconds=0.1)
+        test_msgs = [
+            "short",
+            "repeat text " * 10,
+            "repeat text " * 10,
+            "another unique message with some details",
+            "repeat text " * 10,
+            "final message in test stream"
+        ]
+        test_ts = [0.0, 0.01, 0.02, 0.03, 0.04, 0.20]
+        labels = oracle.generate_labels(test_msgs, test_ts)
+        self.assertEqual(len(labels), len(test_msgs))
+        for l in labels:
+            self.assertIn(l, range(6), f"Label {l} not in valid action range 0..5")
+
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -3,7 +3,8 @@ import time
 from typing import Union
 
 class LinUCBBandit:
-    def __init__(self, d: int = 9, K: int = 6, alpha: float = 0.3, lambda_param: float = 0.01, cost_aware_exploration: bool = False):
+    def __init__(self, d: int = 9, K: int = 6, alpha: float = 0.3, lambda_param: float = 0.01,
+                 cost_aware_exploration: bool = False, max_wait_us: float = 50000.0, enable_deadline: bool = False):
         """
         LinUCB Contextual Bandit.
         Args:
@@ -12,14 +13,24 @@ class LinUCBBandit:
             alpha: Exploration parameter (controls width of confidence interval).
             lambda_param: L2 regularization parameter for ridge regression.
             cost_aware_exploration: If True, discounts exploration bonus for high-latency actions.
+            max_wait_us: Maximum acceptable queue wait deadline in microseconds.
+            enable_deadline: If True, masks BATCH action when predicted wait exceeds max_wait_us.
         """
         self.d = d
         self.K = K
         self.alpha = alpha
         self.lambda_param = lambda_param
         self.cost_aware_exploration = cost_aware_exploration
+        self.max_wait_us = max_wait_us
+        self.enable_deadline = enable_deadline
         self.action_cost_scale = np.ones(self.K)
         self.reset()
+
+    def set_deadline(self, max_wait_us: float = None, enable_deadline: bool = True):
+        """Sets deadline parameters and toggles deadline masking."""
+        if max_wait_us is not None:
+            self.max_wait_us = max_wait_us
+        self.enable_deadline = enable_deadline
 
     def _normalize_features(self, features_dict: dict) -> np.ndarray:
         """Normalizes raw features to a stable [0, 1] range for linear model convergence."""
@@ -39,6 +50,8 @@ class LinUCBBandit:
     def predict(self, features_dict: dict) -> tuple[int, float]:
         """
         Selects the action that maximizes the upper confidence bound.
+        If enable_deadline is True and predicted queue wait exceeds max_wait_us,
+        BATCH (action 5) is masked.
         Returns:
             (action_index, inference_latency_microseconds)
         """
@@ -60,6 +73,13 @@ class LinUCBBandit:
             # Upper Confidence Bound
             p[a] = (theta.T @ x)[0, 0] + self.alpha * bonus_weight * std_dev
             
+        # Deadline mask on BATCH (action 5)
+        if self.enable_deadline and self.max_wait_us is not None:
+            from src.scheduler import estimate_batch_wait_us
+            predicted_wait = estimate_batch_wait_us(features_dict)
+            if predicted_wait > self.max_wait_us:
+                p[5] = -np.inf
+                
         action = int(np.argmax(p))
         latency = (time.perf_counter() - start_time) * 1_000_000
         return action, latency
