@@ -220,7 +220,7 @@ def build_stream(style: str, n: int, seed: int = None):
     filename_map = {
         "DailyDialog-style (chat)": "dailydialog_clean.csv",
         "Sentiment140-style (tweets)": "sentiment140_clean.csv",
-        "NUS-SMS-style (sms)": "nussms_clean.csv"
+        "NUS-SMS-style (sms)": "sms_spam_ham_clean.csv" if os.path.exists(os.path.join(get_data_dir(), "sms_spam_ham_clean.csv")) else "nussms_clean.csv"
     }
     fn = filename_map.get(style, "dailydialog_clean.csv")
     csv_path = os.path.join(get_data_dir(), fn)

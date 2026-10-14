@@ -217,7 +217,7 @@ Adaptive Learning-Based Compression/
 ├── data/
 │   ├── dailydialog_clean.csv
 │   ├── sentiment140_clean.csv
-│   ├── nussms_clean.csv
+│   ├── sms_spam_ham_clean.csv (formerly nussms_clean.csv)
 │   ├── experiment_results.json
 │   ├── env_specs.json
 │   ├── feature_importance.png
@@ -679,7 +679,7 @@ All datasets are subsampled to exactly 5,000 messages using `random.seed(42)` fo
 Saved to:
 - `data/dailydialog_clean.csv` (191 KB, as observed),
 - `data/sentiment140_clean.csv` (473 KB),
-- `data/nussms_clean.csv` (477 KB).
+- `data/sms_spam_ham_clean.csv` (formerly `nussms_clean.csv`, 477 KB).
 
 ---
 
@@ -1080,7 +1080,7 @@ For each input message:
 
 ```bash
 python test_dataset_demo.py --dataset data/dailydialog_clean.csv --samples 50 --scheduler "Decision Tree"
-python test_dataset_demo.py --dataset data/nussms_clean.csv --scheduler "LinUCB"
+python test_dataset_demo.py --dataset data/sms_spam_ham_clean.csv --scheduler "LinUCB"
 ```
 
 Supports: Heuristic, Decision Tree, Random Forest, Logistic Regression, LinUCB schedulers.
@@ -1165,7 +1165,7 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 |------|------|---------|
 | `data/dailydialog_clean.csv` | 191 KB | 5,000 chat messages with msg_id, text, timestamp |
 | `data/sentiment140_clean.csv` | 473 KB | 5,000 cleaned tweets |
-| `data/nussms_clean.csv` | 477 KB | 5,000 SMS ham messages |
+| `data/sms_spam_ham_clean.csv` | 477 KB | SMS ham messages (ucirvine/sms_spam ham subset) |
 | `data/experiment_results.json` | 47 KB | Full benchmark results (1,008 lines) |
 | `data/env_specs.json` | 679 B | System environment specs |
 | `data/feature_importance.png` | 93 KB | Decision Tree feature importance bar chart |

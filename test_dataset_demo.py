@@ -4,7 +4,7 @@ CLI Dataset Demo Utility for Faculty Presentation.
 Usage:
     python test_dataset_demo.py
     python test_dataset_demo.py --dataset data/dailydialog_clean.csv --samples 50
-    python test_dataset_demo.py --dataset data/nussms_clean.csv --scheduler "LinUCB"
+    python test_dataset_demo.py --dataset data/sms_spam_ham_clean.csv --scheduler "LinUCB"
 """
 
 import os

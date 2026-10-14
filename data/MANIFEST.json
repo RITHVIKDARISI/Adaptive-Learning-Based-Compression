@@ -1,35 +1,41 @@
 {
     "dailydialog_clean.csv": {
         "dataset_name": "DailyDialog",
-        "sha256": "0ec304e4507457720eff7ad60c0e048c8b66920e3b633bf54a309b4e14443e2c",
+        "hf_repo": "daily_dialog",
+        "hf_revision": "refs/convert/parquet (commit 469b7118f52336674f1d78693797e9fcc7e47d2a)",
         "row_count": 5000,
-        "file_size_bytes": 191250,
-        "columns": [
-            "msg_id",
-            "text",
-            "timestamp"
-        ]
+        "unique_row_count": 4822,
+        "exact_duplicate_percentage": 3.56,
+        "average_bytes_per_row": 60.652,
+        "sha256": "a689773fd263c25995c3af80771f5475ead9e7d15da70ecdf18db14cab33c66a",
+        "source_breakdown": {
+            "real": 5000
+        }
     },
     "sentiment140_clean.csv": {
         "dataset_name": "Sentiment140",
-        "sha256": "bbd4f14d209fef25cfc5d27c1735f01ba13fa70d63f6a217fb5dd5bc215b28be",
+        "hf_repo": "bdanko/sentiment140",
+        "hf_revision": "main (commit c8aaf1333e9d0cf5886f4eb9506ad917f1d8931c)",
         "row_count": 5000,
-        "file_size_bytes": 466988,
-        "columns": [
-            "msg_id",
-            "text",
-            "timestamp"
-        ]
+        "unique_row_count": 4981,
+        "exact_duplicate_percentage": 0.38,
+        "average_bytes_per_row": 68.7722,
+        "sha256": "985da642412a74f4715c48f6aa673861af6fb4f0186b414e96b93d848e324c98",
+        "source_breakdown": {
+            "real": 5000
+        }
     },
-    "nussms_clean.csv": {
-        "dataset_name": "NUS-SMS",
-        "sha256": "8fa38b26c4397c005f3369519cc7aa00e651235383b79b183ebd1bc4f1a07196",
-        "row_count": 5000,
-        "file_size_bytes": 477083,
-        "columns": [
-            "msg_id",
-            "text",
-            "timestamp"
-        ]
+    "sms_spam_ham_clean.csv": {
+        "dataset_name": "SMS Spam Collection (ham only)",
+        "hf_repo": "ucirvine/sms_spam",
+        "hf_revision": "main (commit cae486f927c250fe1d4a5b55f11357964ed1646c)",
+        "row_count": 4827,
+        "unique_row_count": 4518,
+        "exact_duplicate_percentage": 6.4015,
+        "average_bytes_per_row": 71.5146,
+        "sha256": "c0b0c7fd48fcbb812cd38205dcb77bbf6fe150a250106c2574b4990d7c7a018d",
+        "source_breakdown": {
+            "real": 4827
+        }
     }
 }

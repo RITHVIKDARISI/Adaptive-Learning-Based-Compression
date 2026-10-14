@@ -149,10 +149,14 @@ def generate_synthetic_sms(n_samples: int) -> list[str]:
                 msgs.append(random.choice(long))
         return msgs
 
+    path = os.path.join(get_data_dir(), "sms_spam_ham_clean.csv")
+    if os.path.exists(path):
+        return _load_or_generate("sms_spam_ham_clean.csv", _fallback, n_samples)
     return _load_or_generate("nussms_clean.csv", _fallback, n_samples)
 
 DATASET_GENERATORS = {
     "DailyDialog-style (chat)": (generate_synthetic_conversational, 0.8),
     "Sentiment140-style (tweets)": (generate_synthetic_tweets, 0.5),
     "NUS-SMS-style (sms)": (generate_synthetic_sms, 1.2),
+    "SMS-Spam-Ham-style (sms)": (generate_synthetic_sms, 1.2),
 }

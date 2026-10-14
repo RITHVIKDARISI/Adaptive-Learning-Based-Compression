@@ -100,7 +100,7 @@ def load_csv_dataset(dataset_name: str) -> pd.DataFrame:
     filename_map = {
         "DailyDialog (Conversational Dialogue)": "dailydialog_clean.csv",
         "Sentiment140 (Twitter Tweets)": "sentiment140_clean.csv",
-        "NUS SMS Corpus (Short SMS Messages)": "nussms_clean.csv"
+        "NUS SMS Corpus (Short SMS Messages)": "sms_spam_ham_clean.csv" if os.path.exists(os.path.join(get_data_dir(), "sms_spam_ham_clean.csv")) else "nussms_clean.csv"
     }
     fn = filename_map.get(dataset_name, "dailydialog_clean.csv")
     path = os.path.join(get_data_dir(), fn)
