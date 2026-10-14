@@ -86,7 +86,7 @@ def plot_pareto_frontiers(results):
 
         plt.title(f"Pareto Frontier (Ratio vs Latency) — {d_name}", fontsize=13, fontweight="bold", pad=12)
         plt.xlabel("Mean End-to-End Latency (ms)", fontsize=11)
-        plt.ylabel("Compression Ratio (Compressed / Original)", fontsize=11)
+        plt.ylabel("Compression Ratio (Original / Compressed)", fontsize=11)
         plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left", frameon=True)
         plt.tight_layout()
         plt.savefig(out_path)
@@ -100,23 +100,25 @@ def plot_scheduler_latency(results):
 
     out_path = os.path.join(get_data_dir(), "scheduler_latency.png")
     models = ["Logistic-Regression", "Decision-Tree", "Random-Forest", "LinUCB-Bandit"]
-    means = [12.5, 9.2, 5840.0, 48.0]
-    p95s = [24.0, 18.5, 9920.0, 180.0]
 
-    # Try extracting real values from first dataset lambda_0.01 if available
+    # Extract real values from first dataset lambda_0.01
     first_d = next(iter(results.values())) if results else {}
     l_data = first_d.get("lambda_0.01", {})
-    if l_data:
-        m_list = []
-        mean_list = []
-        p95_list = []
-        for m in models:
-            if m in l_data:
-                m_list.append(m)
-                mean_list.append(l_data[m].get("mean_scheduler_latency_us", 10.0))
-                p95_list.append(l_data[m].get("p95_scheduler_latency_us", 20.0))
-        if m_list:
-            models, means, p95s = m_list, mean_list, p95_list
+    if not l_data:
+        print("ERROR: No lambda_0.01 data found. Cannot plot scheduler latency without real numbers.")
+        return
+    m_list = []
+    mean_list = []
+    p95_list = []
+    for m in models:
+        if m in l_data:
+            m_list.append(m)
+            mean_list.append(l_data[m]["mean_scheduler_latency_us"])
+            p95_list.append(l_data[m]["p95_scheduler_latency_us"])
+    if not m_list:
+        print("ERROR: No scheduler data found in results. Cannot plot.")
+        return
+    models, means, p95s = m_list, mean_list, p95_list
 
     x = np.arange(len(models))
     width = 0.35
@@ -141,13 +143,10 @@ def plot_scheduler_latency(results):
 
 def plot_feature_importance(results):
     out_path = os.path.join(get_data_dir(), "feature_importance.png")
-    features = [
-        "char_len", "entropy", "uppercase_ratio", "repetition_score",
-        "unique_word_ratio", "arrival_rate", "word_len", "emoji_ratio", "punctuation_ratio"
-    ]
-    importances = [0.895, 0.042, 0.031, 0.015, 0.008, 0.004, 0.002, 0.002, 0.001]
+    features = None
+    importances = None
 
-    # Check if DT feature importances exist in results
+    # Extract real DT feature importances from results
     for d_data in results.values():
         for lk, l_data in d_data.items():
             if isinstance(l_data, dict) and "Decision-Tree" in l_data:
@@ -157,6 +156,12 @@ def plot_feature_importance(results):
                     features = list(fi.keys())
                     importances = list(fi.values())
                     break
+        if features is not None:
+            break
+
+    if features is None or importances is None:
+        print("ERROR: No feature importance data found. Cannot plot without real numbers.")
+        return
 
     # Sort descending
     pairs = sorted(zip(importances, features), reverse=True)

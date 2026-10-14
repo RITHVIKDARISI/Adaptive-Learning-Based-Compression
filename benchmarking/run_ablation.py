@@ -15,8 +15,7 @@ def get_subset():
     return df["text"].tolist(), df["timestamp"].tolist()
 
 def eval_system(name, messages, timestamps, scheduler, cache_cap, batch_to, batch_sz, mod_feat=None):
-    manager = BatchCacheManager(timeout_seconds=batch_to, max_batch_size=batch_sz)
-    manager.cache_capacity = cache_cap
+    manager = BatchCacheManager(cache_capacity=cache_cap if cache_cap > 0 else 1, timeout_seconds=batch_to, max_batch_size=batch_sz)
     if cache_cap == 0:
         # Mock LRUCache to completely bypass
         class DummyCache:

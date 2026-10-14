@@ -120,14 +120,14 @@ def prepare_dailydialog(n_samples: int = 5000) -> pd.DataFrame:
 
     timestamps = generate_poisson_timestamps(len(messages), mean_interval_sec=0.5)
     
+    output_path = os.path.join(get_data_dir(), "dailydialog_clean.csv")
+    
     df = pd.DataFrame({
         "msg_id": range(len(messages)),
         "text": messages,
         "timestamp": timestamps,
-        "source_type": "SYNTHETIC" if "synthetic" in output_path else "UNKNOWN" # To be fixed below
+        "source_type": "UNKNOWN"
     })
-    
-    output_path = os.path.join(get_data_dir(), "dailydialog_clean.csv")
     df.to_csv(output_path, index=False)
     print(f"Saved {len(df)} DailyDialog messages to {output_path}")
     return df
