@@ -1,0 +1,20 @@
+{
+    "timestamp": "2026-10-14T14:25:37.893551",
+    "os": "Windows 11",
+    "python_version": "3.13.5 (tags/v3.13.5:6cb20a2, Jun 11 2025, 16:15:46) [MSC v.1943 64 bit (AMD64)]",
+    "cpu": "Intel64 Family 6 Model 186 Stepping 3, GenuineIntel",
+    "cpu_count": 12,
+    "ram_gb": 15.72,
+    "packages": {
+        "zstandard": "0.25.0",
+        "brotli": "1.2.0",
+        "lz4": "4.4.5",
+        "scikit-learn": "1.7.1",
+        "pandas": "2.3.1",
+        "numpy": "2.3.1",
+        "matplotlib": "3.10.3",
+        "datasketch": "2.0.0",
+        "scipy": "1.16.0",
+        "psutil": "7.0.0"
+    }
+}

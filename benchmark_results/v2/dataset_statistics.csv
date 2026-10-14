@@ -1,0 +1,4 @@
+Dataset,File,Rows,Mean_Len_Bytes,Median_Len_Bytes,Min_Len_Bytes,Max_Len_Bytes,Std_Len_Bytes,Unique_Texts,Duplicate_Rate
+DailyDialog,dailydialog_clean.csv,5000,12.8702,13.0,2,32,5.550581227222965,388,0.9224
+Sentiment140,sentiment140_clean.csv,5000,67.972,63.0,3,149,35.5047604695483,4981,0.0038000000000000256
+NUS-SMS,nussms_clean.csv,5000,69.8016,51.0,2,910,58.0390199558883,4527,0.09460000000000002
