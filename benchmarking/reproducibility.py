@@ -70,6 +70,21 @@ def capture_environment_specs(output_path: str):
         env_specs["packages"]["scikit-learn"] = sklearn.__version__
     except ImportError: pass
 
+    try:
+        import numpy
+        env_specs["packages"]["numpy"] = numpy.__version__
+    except ImportError: pass
+
+    try:
+        import pandas
+        env_specs["packages"]["pandas"] = pandas.__version__
+    except ImportError: pass
+
+    try:
+        import scipy
+        env_specs["packages"]["scipy"] = scipy.__version__
+    except ImportError: pass
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(env_specs, f, indent=4)

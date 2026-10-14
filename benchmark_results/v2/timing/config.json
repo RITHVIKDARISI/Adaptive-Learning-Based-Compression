@@ -1,0 +1,31 @@
+{
+    "seeds": [
+        42,
+        123,
+        456,
+        789,
+        2026
+    ],
+    "lambdas": [
+        0.01
+    ],
+    "schedulers": [
+        "Always-Skip",
+        "Always-Zstd",
+        "Always-Brotli",
+        "Always-Gzip",
+        "Always-LZ4",
+        "Fixed-Batch",
+        "Random-Action",
+        "Length-Threshold",
+        "Heuristic",
+        "Logistic Regression",
+        "Decision Tree",
+        "Random Forest",
+        "Gradient Boosting",
+        "LinUCB"
+    ],
+    "warmup_iterations": 10,
+    "min_microbenchmark_iterations": 30,
+    "description": "Publication-quality multi-seed benchmark execution with 8-stage latency accounting and wall-clock throughput"
+}
