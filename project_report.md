@@ -85,7 +85,7 @@ Key takeaways from the literature review, captured in `Literature_Survey.docx`:
 
 1. **No existing work** applies a contextual multi-armed bandit to per-message compression scheduling for heterogeneous short-text streams.
 2. Existing offline-optimal scheduling methods (e.g., learned compression selectors for video) do not generalize to online streaming with sub-millisecond requirements.
-3. MinHash-based Jaccard similarity (datasketch library) is sufficiently fast (~10–50 µs) for online stream repetition scoring.
+3. MinHash-based Jaccard similarity (datasketch library) requires ~700–900 µs end-to-end when integrated with full 9-D feature extraction in the real pipeline (as confirmed by v2 8-stage latency accounting).
 4. The **LinUCB algorithm** (Li et al., 2010) with ridge regression covariance updates is well-suited to online contextual decision problems with bounded feature vectors.
 
 ---
@@ -97,7 +97,7 @@ The `Project_Gap_Analysis.docx` document, combined with the `paperslit/I recomme
 | Gap | Solution Implemented |
 |-----|----------------------|
 | Static codec selection ignores message-level heterogeneity | Per-message feature extraction + action selection |
-| No existing benchmarks on chat / SMS / tweet stream compression | Three real datasets (DailyDialog, Sentiment140, NUS-SMS) |
+| No existing benchmarks on chat / SMS / tweet stream compression | Three real datasets (DailyDialog, Sentiment140, SMS Spam Collection ham-only / UCI) |
 | Batch compression latency not modeled accurately | Discrete-event simulator with exact microsecond timing + queue wait |
 | Repeated-message duplicate detection is not integrated | SHA-256 exact-match LRU cache with lossless verification |
 | Online adaptation absent from prior art | LinUCB contextual bandit with Sherman-Morrison online updates |
@@ -630,11 +630,14 @@ Each simulated message records:
 
 The project benchmarks on three real-world short-text datasets representing different linguistic styles:
 
-| Dataset | Source | Style | Mean Interval | Samples |
-|---------|--------|-------|---------------|---------|
-| **DailyDialog** | Hugging Face `daily_dialog` | Multi-turn conversational chat | 0.5 s | 5,000 |
-| **Sentiment140** | Hugging Face `sentiment140` | Twitter posts / microblogs | 0.2 s | 5,000 |
-| **NUS SMS** | Hugging Face `sms_spam` (ham only) | SMS text messages | 1.5 s | 5,000 |
+| Dataset | Source | Style | Mean Interval | Samples | Unique Rows | Dup. Rate | Avg. Bytes/Row |
+|---------|--------|-------|---------------|---------|-------------|-----------|----------------|
+| **DailyDialog** | Hugging Face `daily_dialog` | Multi-turn conversational chat | 0.5 s | 5,000 | 4,822 | 3.56% | 60.65 |
+| **Sentiment140** | Hugging Face `bdanko/sentiment140` | Twitter posts / microblogs | 0.2 s | 5,000 | 4,981 | 0.38% | 68.77 |
+| **SMS Spam Ham** | Hugging Face `ucirvine/sms_spam` (ham only) | SMS text messages | 1.5 s | 4,827 | 4,518 | 6.40% | 71.51 |
+
+> [!IMPORTANT]
+> Dataset statistics are verified empirically from `data/MANIFEST.json` (v2 audit). The dataset previously called "NUS-SMS" (`nussms_clean.csv`) has been renamed to `sms_spam_ham_clean.csv` and corresponds to the **UCI Machine Learning Repository SMS Spam Collection** (ham messages only). All SHA-256 checksums are recorded in the manifest.
 
 ### 12.2 Loading Strategy with Fallback
 
@@ -677,9 +680,9 @@ These generators intentionally include repetition probabilities to simulate real
 All datasets are subsampled to exactly 5,000 messages using `random.seed(42)` for reproducibility. If fewer messages are available, the shortfall is padded with synthetic data.
 
 Saved to:
-- `data/dailydialog_clean.csv` (191 KB, as observed),
-- `data/sentiment140_clean.csv` (473 KB),
-- `data/sms_spam_ham_clean.csv` (formerly `nussms_clean.csv`, 477 KB).
+- `data/dailydialog_clean.csv` — 5,000 rows, 4,822 unique, 60.65 avg bytes/row, 3.56% dup rate.
+- `data/sentiment140_clean.csv` — 5,000 rows, 4,981 unique, 68.77 avg bytes/row, 0.38% dup rate.
+- `data/sms_spam_ham_clean.csv` (formerly `nussms_clean.csv`) — 4,827 rows, 4,518 unique, 71.51 avg bytes/row, 6.40% dup rate.
 
 ---
 
@@ -829,7 +832,7 @@ Before running the final benchmarks, a rigorous research-grade audit of the expe
 - **Environment Tracking**: A full snapshot of the physical and virtual environment (CPU, logical cores, RAM, OS version, dependency stack, and Git SHA) is generated in `environment.json` alongside raw benchmark data.
 
 > [!IMPORTANT]
-> The baseline results reported below were generated prior to the aforementioned methodology audit. As per the `benchmarking/run_benchmark.py` harness deployment, these numbers are considered obsolete and will be superseded by the new multi-seed raw outputs in the `benchmark_results/` directory once the massive execution runs are authorized.
+> All results in §16 have been regenerated using the v2 8-stage pipeline harness (`run_v2_benchmarks.py`, 5 seeds). They supersede any earlier single-seed numbers. The full empirical record — including environment JSON, dataset SHA-256 checksums, and raw CSV outputs — is in `benchmark_results/v2/`.
 
 ---
 
@@ -839,50 +842,50 @@ All experimental numbers below were generated by running the automated benchmark
 
 ### 16.1 DailyDialog Results
 
-**DailyDialog** represents conversational dialogue. Messages are ultra-short (mean length: 12.87 bytes, min 2, max 32 bytes) with high exact-repetition (92.24% duplicate rate).
+**DailyDialog** represents conversational dialogue. Messages have a mean length of **60.65 bytes** (avg bytes/row, v2 verified) with a **3.56% exact-duplicate rate** (4,822 unique rows out of 5,000). Earlier report versions incorrectly stated 12.87 bytes and a 92.24% duplicate rate — those figures came from a truncated/contaminated sample and are retracted.
 
-#### Benchmark Results (DailyDialog, 2,500 test messages, $\lambda = 0.01$):
+#### Benchmark Results (DailyDialog, v2 8-stage pipeline, 5 seeds, $\lambda = 0.01$):
 
-| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Latency (µs) | P99 Latency (µs) | Cache Hit Rate | Total Cost |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Logistic-Regression** | **1.0000** | **0.00%** | **9.40** | **37.60** | **0.00%** | **32,224.88** (Best) |
-| Decision-Tree | 1.0000 | 0.00% | 9.65 | 29.81 | 0.00% | 32,231.24 |
-| Random-Forest | 1.0000 | 0.00% | 10.16 | 33.21 | 0.00% | 32,244.07 |
-| Always-Skip | 1.0000 | 0.00% | 10.61 | 36.03 | 0.00% | 32,255.25 |
-| Gradient-Boosting | 1.0000 | 0.00% | 11.35 | 36.65 | 0.00% | 32,273.67 |
-| Heuristic | 0.9829 | -1.74% | 12.50 | 47.11 | 2.20% | 32,855.18 |
-| LinUCB-Bandit | 0.8774 | -13.97% | 1,467.49 | 470.53 | 20.68% | 39,603.95 |
-| Always-Brotli | 0.7618 | -31.26% | 23.83 | 120.61 | 91.00% | 42,427.31 |
-| Always-LZ4 | 0.7056 | -41.73% | 12.11 | 39.42 | 91.00% | 45,583.13 |
-| Always-Zstd | 0.5871 | -70.33% | 10.66 | 50.51 | 91.00% | 54,682.50 |
-| Fixed-Batch | 0.5804 | -72.30% | 87,546.06 | 1,470,977.77 | 90.96% | 55,319.52 |
-| Always-Gzip | 0.3913 | -155.54% | 34.08 | 181.27 | 91.00% | 82,101.27 |
+| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Lat. (µs) | P99 Lat. (µs) | Cache Hit Rate | Wall-Clock (msg/s) |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Always-Zstd** | 0.9776 | -2.29% | 755.68 | — | 1.68% | **1,651.6** |
+| **Always-LZ4** | 0.9304 | -7.48% | 815.78 | — | 1.68% | 1,208.5 |
+| **Heuristic** | 1.0030 | 0.30% | 820.36 | — | 0.20% | 1,205.2 |
+| **Always-Brotli** | 1.1123 | **+10.10%** | 898.96 | — | 1.68% | 1,101.3 |
+| **LinUCB** | 1.1402 | **+12.30%** | 1,305.11 | — | 0.13% | 1,025.5 |
+| **Logistic Regression** | 1.1418 | +12.42% | 1,071.96 | — | 0.12% | 921.1 |
+| **Decision Tree** | 1.1479 | +12.88% | 1,084.65 | — | 0.08% | 909.3 |
+| **Always-Skip** | 1.0000 | 0.00% | 1,211.74 | — | 0.00% | 818.0 |
+| **Gradient Boosting** | 1.1464 | +12.77% | 2,217.99 | — | 0.08% | 447.0 |
+| **Random Forest** | 1.1486 | +12.94% | 5,743.56 | — | 0.08% | 173.7 |
+| **Fixed-Batch** | 1.1045 | +9.46% | 838,797.84 | — | 1.68% | 1,202.7 |
+
+> [!WARNING]
+> **True end-to-end latency includes 8 pipeline stages** (feat_lat + cache_lookup + sched_infer + comp + decomp + queue_wait + cache_store + cache_fill_comp). Feature extraction (MinHash Jaccard) alone contributes ~700–900 µs baseline overhead. Always-Skip latency is **1,211 µs**, not 5–10 µs as previously reported. Fixed-Batch without deadline masking incurs **838 ms** mean latency — a 14,000× overestimate of throughput was present in v1 reports.
 
 > [!NOTE]
-> On DailyDialog, all classical compression algorithms produce ratios $< 1.0$ (negative space savings), because compression headers add 15–30 bytes to messages averaging only 12.87 bytes. Offline supervised learning models (Logistic Regression, Decision Tree) correctly recognize this regime and learn to route 100% of messages to SKIP with ultra-low latency ($\approx 9.4\ \mu\text{s}$), outperforming static baselines.
+> On DailyDialog (avg 60.65 bytes/msg), Brotli and supervised models achieve **positive** space savings (+10–13%). DailyDialog is not a short-message dead-zone — it sits near the 64-byte break-even threshold where Brotli first becomes space-efficient. The prior claim that "all codecs expand DailyDialog data" was based on the wrong 12.87-byte mean.
 
 ---
 
 ### 16.2 Sentiment140 Results
 
-**Sentiment140** represents microblog (Twitter) data: longer utterances (mean length: 67.97 bytes, max 149 bytes), near-zero repetition (0.38% duplicate rate), and diverse vocabulary.
+**Sentiment140** represents microblog (Twitter) data: mean length **68.77 bytes** (v2 verified), near-zero repetition (**0.38% duplicate rate**, 4,981 unique of 5,000), and diverse vocabulary.
 
-#### Benchmark Results (Sentiment140, 2,500 test messages, $\lambda = 0.01$):
+#### Benchmark Results (Sentiment140, v2 8-stage pipeline, 5 seeds, $\lambda = 0.01$):
 
-| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Latency (µs) | P99 Latency (µs) | Cache Hit Rate | Total Cost |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| Fixed-Batch | 1.2524 | 20.15% | 515,857.57 | 1,295,326.75 | 0.08% | 135,829.36 |
-| Always-Brotli | 1.1301 | 11.52% | 89.99 | 324.36 | 0.08% | 151,858.43 |
-| **Logistic-Regression** | **1.1499** | **13.04%** | **251.76** | **668.41** | **0.04%** | **153,470.93** |
-| Decision-Tree | 1.1497 | 13.02% | 281.84 | 730.40 | 0.04% | 154,259.93 |
-| LinUCB-Bandit | 1.1284 | 11.38% | 552.93 | 580.08 | 0.08% | 154,547.34 |
-| Heuristic | 1.0051 | 0.51% | 27.76 | 78.40 | 0.04% | 169,235.47 |
-| Always-Skip | 1.0000 | 0.00% | 10.85 | 34.80 | 0.00% | 169,828.33 |
-| Always-Zstd | 0.9906 | -0.95% | 37.68 | 159.93 | 0.08% | 171,899.78 |
-| Gradient-Boosting | 1.1496 | 13.02% | 1,370.01 | 2,681.76 | 0.04% | 181,434.62 |
-| Always-LZ4 | 0.9309 | -7.43% | 14.31 | 41.10 | 0.08% | 182,461.65 |
-| Always-Gzip | 0.8691 | -15.07% | 67.85 | 171.81 | 0.08% | 196,180.41 |
-| Random-Forest | 1.1500 | 13.04% | 5,039.47 | 8,790.67 | 0.04% | 273,094.98 |
+| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Lat. (µs) | Wall-Clock (msg/s) | Cache Hit Rate |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Always-LZ4** | 0.9323 | -7.26% | 791.32 | 1,255.2 | 0.20% |
+| **Always-Skip** | 1.0000 | 0.00% | 805.87 | 1,228.4 | 0.00% |
+| **Always-Zstd** | 0.9958 | -0.42% | 841.88 | 1,171.0 | 0.20% |
+| **Always-Brotli** | 1.1343 | **+11.84%** | 891.58 | 1,107.6 | 0.20% |
+| **Decision Tree** | 1.1524 | **+13.23%** | 975.41 | 1,024.2 | 0.08% |
+| **Logistic Regression** | 1.1519 | +13.18% | 1,190.23 | 844.4 | 0.08% |
+| **LinUCB** | 1.1320 | +11.66% | 1,266.99 | 925.0 | 0.20% |
+| **Gradient Boosting** | 1.1527 | +13.25% | 2,184.49 | 454.0 | 0.08% |
+| **Random Forest** | 1.1533 | +13.29% | 5,902.38 | 169.0 | 0.08% |
+| **Fixed-Batch** | 1.2594 | +20.60% | 520,314.96 | 835.1 | 0.20% |
 
 #### Decision Tree Feature Importances (Sentiment140, $\lambda = 0.01$):
 ```
@@ -898,50 +901,54 @@ emoji_ratio         → 0.00%
 ```
 
 > [!IMPORTANT]
-> In Sentiment140, compression ratio $> 1.0$ indicates positive compression (space savings). Brotli achieves 1.1301 ratio, whereas Zstd, LZ4, and Gzip expand the data. Supervised learning (Logistic Regression and Decision Tree) dynamically compresses compressible tweets while skipping short ones, delivering **13.04% space saving** at sub-300 µs inference.
+> True end-to-end latency for Always-Skip on Sentiment140 is **805 µs** (v2 8-stage), not 10.85 µs as previously reported. Fixed-Batch without deadline masking incurs **520 ms** mean latency. Random Forest degrades to **169 msg/s** wall-clock throughput due to tree-traversal overhead.
 
 ---
 
-### 16.3 NUS-SMS Results
+### 16.3 SMS Spam Ham (UCI) Results
 
-**NUS-SMS** contains real SMS text messages with moderate length (mean: 69.80 bytes, median: 51.0 bytes, max 910 bytes) and 9.46% duplicates.
+**SMS Spam Collection (ham only)** — the dataset previously mis-identified as "NUS-SMS" — contains real SMS text messages with mean length **71.51 bytes** (v2 verified), **4,827 rows**, **6.40% duplicate rate** (4,518 unique). The file is `data/sms_spam_ham_clean.csv`.
 
-#### Benchmark Results (NUS-SMS, 2,500 test messages, $\lambda = 0.01$):
+#### Benchmark Results (SMS Spam Ham, v2 8-stage pipeline, 5 seeds, $\lambda = 0.01$):
 
-| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Latency (µs) | P99 Latency (µs) | Cache Hit Rate | Total Cost |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LinUCB-Bandit** | **1.1601** | **13.80%** | **512.30** | **426.51** | **1.60%** | **148,501.81** (Best Overall) |
-| Always-Brotli | 1.1367 | 12.03% | 64.67 | 195.01 | 8.56% | 149,631.42 |
-| Logistic-Regression | 1.1693 | 14.48% | 379.13 | 829.14 | 1.16% | 153,327.46 |
-| Decision-Tree | 1.1685 | 14.42% | 412.76 | 932.54 | 1.16% | 154,266.45 |
-| Heuristic | 1.0284 | 2.76% | 23.98 | 67.43 | 4.00% | 164,386.00 |
-| Fixed-Batch | 1.0266 | 2.59% | 1,735,871.19 | 7,033,867.46 | 8.52% | 164,547.75 |
-| Always-Zstd | 1.0096 | 0.96% | 21.67 | 64.51 | 8.56% | 167,369.98 |
-| Always-Skip | 1.0000 | 0.00% | 6.25 | 19.50 | 0.00% | 168,722.17 |
-| Gradient-Boosting | 1.1687 | 14.43% | 1,378.53 | 2,807.69 | 1.16% | 178,474.67 |
-| Always-LZ4 | 0.9403 | -6.35% | 11.46 | 30.70 | 8.56% | 179,524.40 |
-| Always-Gzip | 0.8812 | -13.49% | 53.66 | 171.19 | 8.56% | 192,145.76 |
-| Random-Forest | 1.1692 | 14.47% | 6,738.12 | 13,264.94 | 1.12% | 312,310.59 |
+| Scheduler | Compression Ratio | Space Saving (%) | Mean E2E Lat. (µs) | Wall-Clock (msg/s) | Cache Hit Rate |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **Always-Skip** | 1.0000 | 0.00% | 806.93 | 1,227.2 | 0.00% |
+| **Always-LZ4** | 0.9454 | -5.77% | 809.76 | 1,217.3 | 2.28% |
+| **Always-Zstd** | 1.0212 | **+2.08%** | 840.40 | 1,173.7 | 2.28% |
+| **Always-Brotli** | 1.1471 | **+12.82%** | 940.86 | 1,051.4 | 2.28% |
+| **LinUCB** | 1.1350 | +11.90% | 1,349.72 | 907.4 | 2.28% |
+| **Decision Tree** | 1.1744 | **+14.85%** | 1,682.77 | 588.4 | 1.24% |
+| **Logistic Regression** | 1.1662 | +14.25% | 1,708.48 | 577.7 | 1.70% |
+| **Gradient Boosting** | 1.1732 | +14.76% | 2,396.35 | 414.3 | 1.33% |
+| **Random Forest** | 1.1752 | +14.91% | 64,608.92 | 123.4 | 1.33% |
+| **Fixed-Batch** | 1.0412 | +3.96% | 1,879,693.32 | 1,149.6 | 2.28% |
+
+> [!WARNING]
+> Fixed-Batch without deadline masking reaches **1.88 seconds** mean latency on SMS-Spam data, violating all sub-millisecond SLAs. Hard deadline masking (50,000 µs cap) must be enabled in production.
 
 > [!NOTE]
-> On NUS-SMS, **LinUCB-Bandit wins outright**, achieving the lowest total compute cost ($148,501.81$) of all static, heuristic, and learning-based policies. It learns to balance Brotli on longer SMS with Skip on short messages while updating its covariance matrix with negligible overhead.
+> Random Forest degrades to **123.4 msg/s** wall-clock — the slowest of all schedulers — due to scikit-learn ensemble overhead on 100 trees. On this dataset, the supervised tree models (DT: +14.85%, LR: +14.25%) achieve higher space savings than LinUCB (+11.90%) because offline label generation correctly identifies compressible longer SMS messages.
 
 ---
 
-### 16.4 Cross-Dataset Comparative Analysis
+### 16.4 Cross-Dataset Comparative Analysis (v2 8-Stage, 5 Seeds)
 
-| Dataset | Best Static Cost | Best Learning Cost | Winning Model | Space Saving | Mean Latency (µs) |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **DailyDialog** | 32,255.25 (Always-Skip) | **32,224.88** | Logistic Regression | 0.00% | 9.40 |
-| **Sentiment140** | 151,858.43 (Always-Brotli) | **153,470.93** | Logistic Regression | 13.04% | 251.76 |
-| **NUS-SMS** | 149,631.42 (Always-Brotli) | **148,501.81** | LinUCB Bandit | 13.80% | 512.30 |
+| Dataset | Avg Bytes/Row | Best Space Saving | Best Wall-Clock (msg/s) | Highest-Throughput Scheduler | Note |
+| :--- | ---: | :--- | ---: | :--- | :--- |
+| **DailyDialog** | 60.65 | +12.94% (Random Forest) | 1,651.6 | Always-Zstd | Near 64-byte break-even; Brotli viable |
+| **Sentiment140** | 68.77 | +13.29% (Random Forest) | 1,255.2 | Always-LZ4 | Low dup rate; supervised DT best quality |
+| **SMS Spam Ham** | 71.51 | +14.91% (Random Forest) | 1,227.2 | Always-Skip | Fixed-Batch hits 1.88 s without deadline mask |
+
+> [!NOTE]
+> True wall-clock throughput (measured via `time.perf_counter()` over an unbroken stream) ranges from **123–1,652 msg/s** across all schedulers and datasets. Prior v1 claims of 80,000–160,000 msg/s were derived by mathematically inverting per-message timers and are retracted.
 
 ### 16.5 Lambda Sensitivity Sweep Summary
 
 Across the parameter sweep $\lambda \in \{0.001, 0.01, 0.1, 1.0\}$:
-- **DailyDialog**: For all $\lambda \in [0.001, 1.0]$, Decision Tree and Logistic Regression consistently achieve optimal cost by skipping ultra-short messages.
-- **Sentiment140**: At low $\lambda$ (compression prioritized), Logistic Regression dominates; at higher $\lambda \ge 0.1$ (latency penalized), LinUCB Bandit dynamically transitions to lower-latency actions and wins.
-- **NUS-SMS**: LinUCB Bandit dominates across all four values of $\lambda \in \{0.001, 0.01, 0.1, 1.0\}$.
+- **DailyDialog** (avg 60.65 bytes): At low $\lambda$, Brotli and supervised models achieve up to +12–13% space savings. At high $\lambda$ (latency-dominant), Always-Skip minimizes cost.
+- **Sentiment140** (avg 68.77 bytes): Supervised models (DT, LR) achieve consistent +13% savings. LinUCB reaches competitive Pareto positions at $\lambda \ge 0.1$.
+- **SMS Spam Ham** (avg 71.51 bytes): Supervised tree models achieve best per-message savings (+14–15%). LinUCB achieves +11.90% with online adaptation and no offline training.
 
 ---
 
@@ -1180,15 +1187,15 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 
 ### 22.1 Message Length is the Dominant Signal
 
-Across all three datasets and all lambda settings, `char_len` consistently captures >89% of Decision Tree feature importance. The primary scheduling decision is:
+Across all three datasets and all lambda settings, `char_len` consistently captures >88% of Decision Tree feature importance (88.17% on Sentiment140). The primary scheduling decision is:
 
 > **"Is this message long enough for compression to yield net savings?"**
 
-For messages below ~25 characters, all compressors add more overhead (header bytes) than they save, making SKIP the optimal action. For messages above ~100 characters with redundant content, ZSTD or batching yield meaningful savings.
+Formal microbenchmarking (v2, `benchmark_results/codec_by_length.csv`) confirms that **no classical codec produces positive space savings below 64 bytes**. For 16–31 bytes, data expands by −16.83% (Brotli) to −85.32% (Gzip). Break-even is first reached at 64–127 bytes: Brotli +18.31%, Zstd +8.51%, LZ4 +0.56%. Gzip does not break even until ≥128 bytes.
 
-### 22.2 Exact-Match Caching Dominates on Repetitive Streams
+### 22.2 Exact-Match Caching on Real Datasets
 
-For DailyDialog (conversational chat), the 90.96% cache hit rate observed with static compression baselines reveals that **most conversational messages are exact duplicates**. A simple exact-match cache effectively eliminates the need for per-message compression decisions for the majority of traffic.
+The v2-verified datasets have **low duplicate rates** (DailyDialog 3.56%, Sentiment140 0.38%, SMS Spam Ham 6.40%). The previously reported 90.96% cache hit rate came from a contaminated/truncated DailyDialog sample and is retracted. In production streams with real data, caching provides modest benefit; the compression scheduler is the primary optimization lever.
 
 This implies that for real-world chat deployments, cache design and capacity are at least as important as the choice of compression algorithm.
 
@@ -1198,17 +1205,19 @@ Sentiment140 (Twitter) demonstrated that for short, unique, high-entropy message
 
 ### 22.4 LinUCB Bandit Behavior
 
-The LinUCB Bandit showed interesting behavior:
-- **DailyDialog**: Achieved 83.28% cache hit rate after online learning — it discovered the value of CACHE_REUSE actions. However, the cold-start exploration of BATCH action during early messages inflated mean latency due to long queue waits.
-- **Sentiment140**: The bandit eventually converged on SKIP-biased actions as expected for short unique tweets.
+The LinUCB Bandit showed nuanced behavior in the v2 multi-seed drift evaluation (N=20 seeds, 8 scenarios):
+- **Online adaptation is effective** in 6 of 8 drift scenarios where LinUCB significantly outperforms Always-Zstd (Wilcoxon p < 0.05, Holm-corrected).
+- **LinUCB does NOT universally dominate**: In `drift_6_alternating` (alternating regimes every 500 messages), Always-Zstd **statistically defeats** LinUCB (p=0.00032, Mean Cost 32.75 vs. 34.74). The prior claim that "LinUCB dominates static baselines across all scenarios" is retracted.
+- An omniscient **Best-Static policy (Always-Brotli)** achieves lower mean cost than LinUCB in most scenarios because online bandits pay an unavoidable exploration regret penalty following abrupt change points.
+- **Offline supervised models degenerate under drift**: In drift scenarios where the initial 500-message training window yields only one optimal label (e.g., all SKIP), supervised models collapse to single-action predictors. In `drift_2_uniqS_repL`, Decision Tree incurs Mean Cost 298.90 vs. LinUCB's 25.18 (+1,249% gap to oracle).
 
 The bandit's key advantage is **no offline training** — it starts cold and adapts in real time, making it suitable for deployment on data distributions where labeled training data is unavailable.
 
-### 22.5 Supervised Schedulers Converge to SKIP on Short Streams
+### 22.5 Supervised Schedulers on Real Datasets
 
-For DailyDialog at all tested lambda values, the supervised models (LR, DT, RF, GBM) all learned to SKIP every message (compression ratio = 1.0, 0% cache hits). This is because the offline label generator, using the cost function, correctly identifies SKIP as the cheapest action for short conversational messages. The trained classifiers generalize this rule perfectly.
+For the v2-verified DailyDialog dataset (avg 60.65 bytes, not the former erroneous 12.87 bytes), supervised models achieve **+12–13% space savings** — they do not collapse to always-SKIP as previously stated. That prior behavior was an artifact of the contaminated sample where nearly all messages were < 15 bytes.
 
-This is technically correct behavior, but means that for DailyDialog specifically, the sophisticated ML scheduler reduces to the trivial "always skip" policy — the real value of the cache is handled transparently by the simulator's cache layer, not the scheduler.
+However, in **online drift scenarios**, offline supervised models still degenerate. When the training window yields a single dominant label, the classifier becomes a constant predictor. This is a genuine limitation that persists in production streams with abrupt distribution shifts.
 
 ### 22.6 Pareto Frontier Insights
 
@@ -1253,28 +1262,38 @@ Following the initial static benchmarks, a rigorous evaluation of the system's a
 
 ### 25.1 Experimental Setup
 
-The benchmark evaluated 6 distinct synthetic distribution shift scenarios:
-1. **Repetitive Long Text → Unique Short Text**
-2. **Unique Short Text → Repetitive Long Text**
-3. **Low Arrival Rate → Burst Traffic**
-4. **Natural English → JSON/Log-style Messages**
-5. **Low Duplicate Rate → High Duplicate Rate**
-6. **Alternating Regimes every 500 messages**
+The benchmark evaluated **8 distinct distribution shift scenarios** (extended from the initially reported 6):
+1. **Repetitive Long Text → Unique Short Text** (`drift_1_repL_uniqS`)
+2. **Unique Short Text → Repetitive Long Text** (`drift_2_uniqS_repL`)
+3. **Low Arrival Rate → Burst Traffic** (`drift_3_lowRate_burst`)
+4. **Natural English → JSON/Log-style Messages** (`drift_4_nat_json`)
+5. **Low Duplicate Rate → High Duplicate Rate** (`drift_5_lowDup_highDup`)
+6. **Alternating Regimes every 500 messages** (`drift_6_alternating`)
+7. **DailyDialog → Sentiment140 → SMS Sequential** (`drift_7_natural_sequential`)
+8. **Interleaved Real Dataset Switching** (`drift_8_natural_switching`)
 
-Each scenario consisted of streams of 5,000–20,000 messages. The evaluation compared the LinUCB bandit against `Always-Skip`, `Always-Zstd`, `Heuristic`, `Decision Tree`, `Best-Static`, and `Oracle` policies. The evaluation tracked rolling cost, rolling latency, cumulative regret, and adaptation lag objectively. 
+Each scenario consisted of streams of ≥5,000 messages. Policies evaluated: LinUCB (deadline-aware), LinUCB (no deadline), Heuristic (deadline-aware), Always-Skip, Always-Zstd, Always-LZ4, Always-Brotli, Always-Gzip, Best-Static (Always-Brotli), Oracle, Decision Tree, Logistic Regression.
 
-All analyses were statistically validated across 5 independent random seeds with non-parametric Wilcoxon signed-rank tests and Holm correction for multiple comparisons.
+All analyses were statistically validated across **N=20 independent random seeds** with paired Wilcoxon signed-rank tests and step-down Holm-Bonferroni correction for multiple comparisons. Full results, CIs, effect sizes, and adaptation lag data are in `benchmark_results/v2/SUMMARY_FOR_PAPER.md §4–5`.
 
-### 25.2 Key Findings from Drift Benchmarks
+### 25.2 Key Findings from Drift Benchmarks (v2, N=20 Seeds)
 
-1. **Online Adaptation is Effective:** Context-aware adaptation dynamically chooses the optimal trade-off between latency and compression ratio, proving its efficacy over statically configured streams. LinUCB and Heuristic dominate the drift scenarios compared to static baselines.
-2. **Burn-in and Adaptation Lag:** While adaptive, online learning requires a burn-in period. Pure "instantaneous" zero-shot optimality is not supported without pre-training; the Heuristic scheduler is a strong baseline during this lag period.
-3. **Caching Dominates Redundant Streams:** The "Scheduler + Cache" variant drastically outperforms "Scheduler only" on repetitive data. Exact-match caching is responsible for massive space savings and latency reductions, making the ML scheduler a secondary optimization in highly redundant environments.
-4. **Message Length Remains the Dominant Feature:** Feature ablation confirms that while full ML models find marginal gains in complex NLP tasks, simple thresholding on `char_len` captures the vast majority of the variance in compressibility.
+1. **Online Adaptation is Effective in Most Scenarios:** LinUCB (deadline-aware) statistically outperforms Always-Zstd in **6 of 8** scenarios (Wilcoxon p < 0.05, Holm-corrected). Mean cost reduction ranges from −2.1% (`drift_4`) to −17.7% (`drift_2`).
+2. **LinUCB Does Not Universally Win:** In `drift_6_alternating` (500-message alternating regimes), Always-Zstd defeats LinUCB (p=0.00032, r=+0.848, d_z=+1.003). Best-Static (Always-Brotli) achieves lower mean cost than LinUCB in 5 of 8 scenarios due to unavoidable exploration regret.
+3. **Supervised Model Catastrophic Degeneracy Under Drift:** In `drift_2_uniqS_repL`, Decision Tree and Logistic Regression lock into single-class prediction and incur Mean Cost 298.90 vs. LinUCB's 25.18 — a **+1,249% gap to oracle**.
+4. **Batching Requires Hard Deadline Masking:** Without deadline masking, Fixed-Batch accumulates queue waits up to 1.88 seconds (SMS-Spam). Deadline masking (50,000 µs cap) is mandatory for any real-time deployment.
+5. **Adaptation Lag Varies by Scenario:** LinUCB converges to within 1.10× oracle cost after 0–2,043 messages depending on scenario. `drift_1_repL_uniqS` and `drift_6_alternating` show the hardest adaptation challenges (lag 488–492 messages, only 2–20 of 20 seeds converging).
+6. **Message Length Remains the Dominant Feature:** Decision Tree feature ablation confirms `char_len` accounts for 88.17% of split importance across all datasets.
 
 ### 25.3 Final Evaluation Conclusion
 
-The rigorous multi-seed evaluation, complete with strict pareto analyses and ablation across all major axes, confirms that the system is highly robust and meets standard academic publication requirements (Benchmark-Readiness Score: 95/100). The only remaining requirement for publication is to evaluate the system on a massive, real-world multi-terabyte production stream exhibiting natural distribution shifts (e.g., the Twitter firehose during a global event). Full results, including 12 publication-quality figures and raw statistical test outputs, are available in the `benchmark_results/` directory.
+The v2 rigorous evaluation (N=20 seeds, 8 drift scenarios, 3 real datasets, 8-stage latency accounting, Holm-corrected Wilcoxon tests) confirms that the system meets research-grade publication standards with the following caveats fully documented:
+- LinUCB does not dominate all drift scenarios (corrects prior overclaim).
+- True end-to-end latency is 800–1,700 µs, not the previously reported 5–550 µs.
+- True wall-clock throughput is 123–1,652 msg/s, not the previously reported 80,000–160,000 msg/s.
+- The third dataset is the UCI SMS Spam Collection (ham only), not NUS-SMS.
+
+Full results, publication-ready vector PDF figures, and raw statistical outputs are in `benchmark_results/v2/`. The SUMMARY_FOR_PAPER.md document in that directory contains every number needed for paper submission.
 
 ---
 
@@ -1309,7 +1328,8 @@ $$\text{timestamp}_i = \sum_{j=0}^{i} \Delta t_j$$
 
 ---
 
-**Report compiled**: 2026-09-09  
+**Report compiled**: 2026-10-16 (v2 audit update)  
 **Project**: Adaptive Learning-Based Compression Scheduling for Real-Time Short-Text Streams  
 **Workspace**: `c:\Users\rithv\Downloads\Adaptive Learning-Based Compression`  
-**Coverage**: All production source files, tests, datasets, experiments, new online adaptation drift benchmarks, and output artifacts as of September 2026 system state.
+**Coverage**: All production source files, tests, datasets, experiments, v2 multi-seed drift benchmarks (N=20), 8-stage latency accounting, and output artifacts as of October 2026 system state.  
+**v2 Empirical Record**: `benchmark_results/v2/SUMMARY_FOR_PAPER.md` — all numbers in §16, §23, §25 of this report are sourced from that document.
