@@ -83,5 +83,33 @@ class TestGapFixes(unittest.TestCase):
         bandit.update(action, features, reward=-100.0)
         self.assertEqual(len(bandit.reward_history), 1)
 
+    def test_calibrate_action_cost_scales(self):
+        """Verify calibrate_action_cost_scales returns valid scales >= 1.0 with scale[0] == 1.0."""
+        from src.bandit import calibrate_action_cost_scales
+        sample_msgs = ["short text", "a" * 200, "hello world this is a test message " * 5]
+        scales = calibrate_action_cost_scales(sample_msgs)
+        self.assertEqual(len(scales), 6)
+        self.assertEqual(scales[0], 1.0)
+        for s in scales:
+            self.assertGreaterEqual(s, 1.0)
+
+    def test_bandit_warm_start(self):
+        """Verify LinUCBBandit with warm_start_steps follows length heuristic for N steps."""
+        bandit = LinUCBBandit(warm_start_steps=2)
+        feat_short = {"char_len": 15}
+        feat_long = {"char_len": 50}
+
+        # Step 1: short (< 25) -> SKIP (0)
+        act1, _ = bandit.predict(feat_short)
+        self.assertEqual(act1, 0)
+
+        # Step 2: long (>= 25) -> ZSTD (1)
+        act2, _ = bandit.predict(feat_long)
+        self.assertEqual(act2, 1)
+
+        # Step 3: beyond warm-start -> UCB decision (valid action in 0..5)
+        act3, _ = bandit.predict(feat_short)
+        self.assertIn(act3, list(range(6)))
+
 if __name__ == "__main__":
     unittest.main()
