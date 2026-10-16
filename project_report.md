@@ -986,7 +986,7 @@ A horizontal bar chart of Gini importance values from the Decision Tree model (g
 ### 16.4 V2 Validated Publication Figures
 
 The revised, clean benchmark run generates two publication-ready high-resolution figures in `benchmark_results/v2/`:
-1. **[`pareto_frontier.png`](file:///c:/Users/rithv/Downloads/Adaptive%20Learning-Based%20Compression/benchmark_results/v2/pareto_frontier.png)**: 3-panel comparative Pareto frontier across DailyDialog, Sentiment140, and NUS-SMS illustrating the compression ratio vs. end-to-end latency frontier with $\lambda$ sensitivity markers.
+1. **[`pareto_frontier.png`](file:///c:/Users/rithv/Downloads/Adaptive%20Learning-Based%20Compression/benchmark_results/v2/pareto_frontier.png)**: 3-panel comparative Pareto frontier across DailyDialog, Sentiment140, and SMS Spam Ham (UCI) illustrating the compression ratio vs. end-to-end latency frontier with $\lambda$ sensitivity markers.
 2. **[`feature_importance.png`](file:///c:/Users/rithv/Downloads/Adaptive%20Learning-Based%20Compression/benchmark_results/v2/feature_importance.png)**: Decision tree Gini feature importance breakdown indicating `char_len` (88.17%), `uppercase_ratio` (6.35%), and `entropy` (4.29%).
 
 ---
@@ -1178,7 +1178,7 @@ All compression libraries (zstandard, brotli, lz4) are pure Python wrappers arou
 | `data/feature_importance.png` | 93 KB | Decision Tree feature importance bar chart |
 | `data/scheduler_latency.png` | 92 KB | Scheduler inference latency comparison |
 | `data/pareto_dailydialog.png` | 207 KB | Pareto frontier for DailyDialog |
-| `data/pareto_nus-sms.png` | 253 KB | Pareto frontier for NUS-SMS |
+| `data/pareto_sms_spam_ham.png` | 253 KB | Pareto frontier for SMS Spam Ham (UCI) |
 | `data/pareto_sentiment140.png` | 269 KB | Pareto frontier for Sentiment140 |
 
 ---
